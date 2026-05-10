@@ -1,0 +1,133 @@
+name: Deploy Bot
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Create deployment package
+        run: |
+          mkdir -p deploy
+          cp -r dist deploy/
+          cp -r locales deploy/
+          cp package.json deploy/
+          cp package-lock.json deploy/ 2>/dev/null || true
+          cp pnpm-lock.yaml deploy/ 2>/dev/null || true
+          tar -czf deploy.tar.gz deploy/
+
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-package
+          path: deploy.tar.gz
+          retention-days: 7
+
+      - name: Deploy via SSH (if configured)
+        if: ${{ secrets.SSH_HOST != '' }}
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          source: "deploy.tar.gz"
+          target: "/tmp/"
+
+      - name: Execute remote commands (if configured)
+        if: ${{ secrets.SSH_HOST != '' }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+            DEPLOY_PATH=${DEPLOY_PATH:-/opt/bot}
+            cd $DEPLOY_PATH || (mkdir -p $DEPLOY_PATH && cd $DEPLOY_PATH)
+            
+            # Распаковка архива
+            tar -xzf /tmp/deploy.tar.gz
+            
+            # Копирование файлов
+            cp -r deploy/* ./
+            rm -rf deploy /tmp/deploy.tar.gz
+            
+            # Установка зависимостей
+            npm ci --production
+            
+            # Перезапуск или запуск через PM2
+            if pm2 list | grep -q "sephora-host-bot"; then
+              pm2 restart sephora-host-bot
+            else
+              pm2 start ecosystem.config.js
+              pm2 save
+            fi
+            
+            # Показываем статус
+            pm2 status
+            pm2 logs sephora-host-bot --lines 20
+
+  docker-build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub (optional)
+        if: ${{ secrets.DOCKER_USERNAME != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' && secrets.DOCKER_USERNAME != '' }}
+          tags: |
+            sephora-host-bot:latest
+            sephora-host-bot:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME && format('{0}/sephora-host-bot:latest', secrets.DOCKER_USERNAME) }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

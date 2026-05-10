@@ -1,0 +1,31 @@
+{
+  "trigger": {
+    "type": "EVENT",
+    "eventNames": ["deposit.completed"]
+  },
+  "conditions": {
+    "rules": []
+  },
+  "steps": [
+    {
+      "id": "receipt",
+      "templateKey": "receipt",
+      "delayHours": 0
+    }
+  ],
+  "offers": {},
+  "templates": {
+    "receipt": {
+      "key": "receipt",
+      "ru": {
+        "text": "+ {{amount}} $ зачислено на баланс."
+      },
+      "en": {
+        "text": "+ {{amount}} $ added to your balance."
+      },
+      "variables": ["amount"]
+    }
+  },
+  "throttle": {},
+  "attribution": { "conversionWindowHours": 72, "successEvent": "deposit", "model": "last_touch" }
+}

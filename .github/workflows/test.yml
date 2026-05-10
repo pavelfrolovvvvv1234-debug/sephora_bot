@@ -1,0 +1,86 @@
+name: Test Bot
+
+on:
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+jobs:
+  test-bot:
+    name: Test Bot Functionality
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create test environment
+        run: |
+          mkdir -p data sessions
+          echo "NODE_ENV=test" >> .env.test
+          echo "BOT_TOKEN=test_token" >> .env.test
+          echo "BOT_USERNAME=test_bot" >> .env.test
+          echo "WEBSITE_URL=https://example.com" >> .env.test
+          echo "SUPPORT_USERNAME_TG=test_support" >> .env.test
+          echo "PAYMENT_CRYSTALPAY_ID=test" >> .env.test
+          echo "PAYMENT_CRYSTALPAY_SECRET_ONE=test" >> .env.test
+          echo "PAYMENT_CRYSTALPAY_SECRET_TWO=test" >> .env.test
+          echo "VMM_EMAIL=test@example.com" >> .env.test
+          echo "VMM_PASSWORD=test" >> .env.test
+          echo "VMM_ENDPOINT_URL=https://test.example.com" >> .env.test
+
+      - name: Test config validation
+        run: |
+          cp .env.test .env
+          node -e "
+            require('dotenv').config();
+            try {
+              const { config } = require('./src/app/config.js');
+              console.log('✅ Config validation passed');
+              console.log('Config keys:', Object.keys(config).length);
+            } catch (e) {
+              console.error('❌ Config validation failed:', e.message);
+              process.exit(1);
+            }
+          "
+
+      - name: Test TypeScript compilation
+        run: npm run typecheck
+
+      - name: Test build
+        run: npm run build
+
+      - name: Check build output
+        run: |
+          if [ -d "dist" ] && [ -f "dist/index.js" ]; then
+            echo "✅ Build output is valid"
+            echo "Build files:"
+            find dist -type f -name "*.js" | head -20
+          else
+            echo "❌ Build output is invalid"
+            exit 1
+          fi
+
+      - name: Test module imports
+        run: |
+          node -e "
+            try {
+              // Test critical imports
+              require('./dist/app/config.js');
+              require('./dist/app/logger.js');
+              require('./dist/infrastructure/db/datasource.js');
+              console.log('✅ All critical modules can be imported');
+            } catch (e) {
+              console.error('❌ Module import failed:', e.message);
+              process.exit(1);
+            }
+          "

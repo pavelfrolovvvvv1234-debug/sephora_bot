@@ -1,0 +1,37 @@
+{
+  "trigger": {
+    "type": "SCHEDULE",
+    "schedule": {
+      "type": "calendar",
+      "window": "end_of_month",
+      "daysBefore": 2,
+      "timezone": "Europe/Moscow"
+    }
+  },
+  "conditions": {
+    "rules": []
+  },
+  "steps": [
+    {
+      "id": "scarcity",
+      "templateKey": "monthly_promo",
+      "delayHours": 0
+    }
+  ],
+  "offers": {},
+  "templates": {
+    "monthly_promo": {
+      "key": "monthly_promo",
+      "ru": { "text": "Закрываем месяц. +12% бонус к пополнению до 23:59." },
+      "en": { "text": "Month closing. +12% bonus on top-up until 23:59." }
+    }
+  },
+  "throttle": { "perUserPerScenarioHours": 720 },
+  "quietHours": {
+    "enabled": true,
+    "timezoneDefault": "Europe/Moscow",
+    "allowedStartHour": 9,
+    "allowedEndHour": 22
+  },
+  "attribution": { "conversionWindowHours": 24, "successEvent": "deposit", "model": "last_touch" }
+}

@@ -1,0 +1,47 @@
+{
+  "trigger": {
+    "type": "SCHEDULE",
+    "schedule": { "type": "cron", "expression": "0 12 * * *" }
+  },
+  "conditions": {
+    "rules": [
+      { "field": "first_vds_days_ago", "operator": "eq", "value": 14 }
+    ],
+    "notSentInHours": 8760
+  },
+  "steps": [
+    {
+      "id": "nps_ask",
+      "templateKey": "nps_ask",
+      "delayHours": 0
+    }
+  ],
+  "offers": {},
+  "templates": {
+    "nps_ask": {
+      "key": "nps_ask",
+      "ru": {
+        "text": "Оцените сервис от 1 до 5.",
+        "buttons": [
+          { "text": "1", "action": "callback", "payload": "nps:1" },
+          { "text": "2", "action": "callback", "payload": "nps:2" },
+          { "text": "3", "action": "callback", "payload": "nps:3" },
+          { "text": "4", "action": "callback", "payload": "nps:4" },
+          { "text": "5", "action": "callback", "payload": "nps:5" }
+        ]
+      },
+      "en": {
+        "text": "Rate the service from 1 to 5.",
+        "buttons": [
+          { "text": "1", "action": "callback", "payload": "nps:1" },
+          { "text": "2", "action": "callback", "payload": "nps:2" },
+          { "text": "3", "action": "callback", "payload": "nps:3" },
+          { "text": "4", "action": "callback", "payload": "nps:4" },
+          { "text": "5", "action": "callback", "payload": "nps:5" }
+        ]
+      }
+    }
+  },
+  "throttle": { "perUserPerScenarioHours": 8760 },
+  "attribution": { "conversionWindowHours": 168, "successEvent": "deposit", "model": "last_touch" }
+}

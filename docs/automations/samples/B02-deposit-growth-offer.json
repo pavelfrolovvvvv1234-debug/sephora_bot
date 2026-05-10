@@ -1,0 +1,45 @@
+{
+  "trigger": {
+    "type": "EVENT",
+    "eventNames": ["deposit.completed"]
+  },
+  "conditions": {
+    "rules": [
+      { "field": "amount", "operator": "gte", "value": 50 },
+      { "field": "not_sent_growth_24h", "operator": "eq", "value": 1 }
+    ],
+    "cooldownHours": 24
+  },
+  "steps": [
+    {
+      "id": "upsell",
+      "templateKey": "upsell_50",
+      "offerVariantKey": "upsell_offer",
+      "delayHours": 0
+    }
+  ],
+  "offers": {
+    "upsell_offer": {
+      "key": "upsell_offer",
+      "type": "bonus_percent",
+      "scope": "deposit",
+      "value": 10,
+      "ttlHours": 1,
+      "autoApply": true,
+      "claimButton": false
+    }
+  },
+  "templates": {
+    "upsell_50": {
+      "key": "upsell_50",
+      "ru": {
+        "text": "Пополните ещё $50 и получите +10% бонуса."
+      },
+      "en": {
+        "text": "Top up another $50 and get +10% bonus."
+      }
+    }
+  },
+  "throttle": { "perUserPerScenarioHours": 24 },
+  "attribution": { "conversionWindowHours": 72, "successEvent": "deposit", "model": "last_touch" }
+}

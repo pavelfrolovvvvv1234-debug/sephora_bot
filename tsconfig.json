@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "alwaysStrict": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "rootDir": "src",
+    "baseUrl": "./",
+    "lib": ["ESNext"],
+    "paths": {
+      "@/*": ["src/*"],
+      "@entities/*": ["src/entities/*"],
+      "@helpers/*": ["src/helpers/*"],
+      "@api/*": ["src/api/*"],
+      "@lib/*": ["src/lib/*"]
+    },
+    "experimentalDecorators": true,
+    "outDir": "dist",
+    "typeRoots": ["node_modules/@types", "./global.d.ts"],
+    "emitDecoratorMetadata": true,
+    "noEmitOnError": false
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "scripts", "src/**/__tests__/**"],
+  "ts-node": {
+    "require": ["tsconfig-paths/register"],
+    "swc": true
+  }
+}

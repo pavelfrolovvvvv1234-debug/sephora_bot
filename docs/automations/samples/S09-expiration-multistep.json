@@ -1,0 +1,64 @@
+{
+  "trigger": {
+    "type": "EVENT",
+    "eventNames": ["service.expiring", "service.grace_start"]
+  },
+  "conditions": {
+    "rules": [
+      { "field": "balance_sufficient", "operator": "eq", "value": 0 }
+    ]
+  },
+  "steps": [
+    {
+      "id": "grace_day1",
+      "name": "Day 1",
+      "templateKey": "vds_expiration",
+      "offerVariantKey": "renew_discount",
+      "delayHours": 0
+    },
+    {
+      "id": "grace_day2",
+      "name": "Day 2",
+      "templateKey": "grace_day2",
+      "offerVariantKey": "renew_discount",
+      "delayHours": 24
+    },
+    {
+      "id": "grace_day3",
+      "name": "Day 3",
+      "templateKey": "grace_day3",
+      "offerVariantKey": "renew_discount",
+      "delayHours": 48
+    }
+  ],
+  "offers": {
+    "renew_discount": {
+      "key": "renew_discount",
+      "type": "discount_percent",
+      "scope": "renewal",
+      "value": 5,
+      "ttlHours": 72,
+      "autoApply": true,
+      "claimButton": false
+    }
+  },
+  "templates": {
+    "vds_expiration": {
+      "key": "vds_expiration",
+      "ru": { "text": "Ваша VDS истекает. Пополните баланс на {{amount}} $. Скидка 5% при продлении — 72ч." },
+      "en": { "text": "Your VDS is expiring. Top up balance by {{amount}} $. 5% renewal discount — 72h." }
+    },
+    "grace_day2": {
+      "key": "grace_day2",
+      "ru": { "text": "+5% скидка при продлении действует ещё 24ч. Продлите сейчас." },
+      "en": { "text": "5% renewal discount valid for 24h more. Renew now." }
+    },
+    "grace_day3": {
+      "key": "grace_day3",
+      "ru": { "text": "Последний шанс продлить без потери данных. Скидка 5% ещё активна." },
+      "en": { "text": "Last chance to renew without data loss. 5% discount still active." }
+    }
+  },
+  "throttle": { "perStepCap": 1 },
+  "attribution": { "conversionWindowHours": 72, "successEvent": "renew", "model": "last_touch" }
+}

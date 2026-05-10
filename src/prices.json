@@ -1,0 +1,431 @@
+{
+  "virtual_vds": [
+    {
+      "name": "1/1/10",
+      "cpu": 1,
+      "ram": 1,
+      "ssd": 10,
+      "network": 150,
+      "price": {
+        "bulletproof": 1.5,
+        "default": 1.5
+      }
+    },
+    {
+      "name": "2/2/15",
+      "cpu": 2,
+      "ram": 2,
+      "ssd": 15,
+      "network": 150,
+      "price": {
+        "bulletproof": 2.5,
+        "default": 2.5
+      }
+    },
+    {
+      "name": "2/3/25",
+      "cpu": 2,
+      "ram": 3,
+      "ssd": 25,
+      "network": 150,
+      "price": {
+        "bulletproof": 3,
+        "default": 3
+      }
+    },
+    {
+      "name": "2/4/30",
+      "cpu": 2,
+      "ram": 4,
+      "ssd": 30,
+      "network": 150,
+      "price": {
+        "bulletproof": 4,
+        "default": 4
+      }
+    }
+  ],
+  "dedicated_servers": [
+    {
+      "name": "Intel Core i7-6700 64GB",
+      "category": "standard",
+      "locations": ["de-germany"],
+      "cpu": 4,
+      "cpuThreads": 8,
+      "ram": 64,
+      "storage": 500,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "AlmaLinux 8/9, CentOS 9, Debian 11/12/13, Ubuntu 22/24",
+      "price": { "default": 90 }
+    },
+    {
+      "name": "Intel Core i7-8700 64GB",
+      "category": "standard",
+      "locations": ["de-germany"],
+      "cpu": 6,
+      "cpuThreads": 12,
+      "ram": 64,
+      "storage": 500,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "AlmaLinux 8/9, CentOS 9, Debian 11/12/13, Ubuntu 22/24",
+      "price": { "default": 110 }
+    },
+    {
+      "name": "Intel Xeon E3-1240v2 64GB",
+      "category": "standard",
+      "locations": ["nl-amsterdam", "usa", "tr-istanbul"],
+      "cpu": 4,
+      "cpuThreads": 8,
+      "ram": 64,
+      "storage": 500,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "AlmaLinux 8/9, CentOS 9, Debian 11/12/13, Ubuntu 22/24",
+      "price": { "default": 120 }
+    },
+    {
+      "name": "Ryzen 7 3700X 64GB",
+      "category": "standard",
+      "locations": ["de-germany"],
+      "cpu": 8,
+      "cpuThreads": 16,
+      "ram": 64,
+      "storage": 2000,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "AlmaLinux 8/9, CentOS 9, Debian 11/12/13, Ubuntu 22/24",
+      "price": { "default": 140 }
+    },
+    {
+      "name": "Ryzen 9 3900 64GB",
+      "category": "standard",
+      "locations": ["de-germany"],
+      "cpu": 12,
+      "cpuThreads": 24,
+      "ram": 64,
+      "storage": 2000,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "AlmaLinux 8/9, CentOS 9, Debian 11/12/13, Ubuntu 22/24",
+      "price": { "default": 150 }
+    },
+    {
+      "name": "Ryzen 9 5950X 128GB",
+      "category": "standard",
+      "locations": ["de-germany"],
+      "cpu": 16,
+      "cpuThreads": 32,
+      "ram": 128,
+      "storage": 2000,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "AlmaLinux 8/9, CentOS 9, Debian 11/12/13, Ubuntu 22/24",
+      "price": { "default": 190 }
+    },
+    {
+      "name": "Intel Xeon E3-1240v2 32GB",
+      "category": "standard",
+      "locations": ["de-germany", "nl-amsterdam", "usa", "tr-istanbul"],
+      "cpu": 4,
+      "cpuThreads": 8,
+      "ram": 32,
+      "storage": 250,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "AlmaLinux 8/9, CentOS 9, Debian 11/12/13, Ubuntu 22/24",
+      "price": { "default": 80 }
+    },
+    {
+      "name": "2x Intel Xeon X5670 64GB",
+      "category": "standard",
+      "locations": ["de-germany", "nl-amsterdam", "usa", "tr-istanbul"],
+      "cpu": 12,
+      "cpuThreads": 24,
+      "ram": 64,
+      "storage": 250,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "AlmaLinux 8/9, CentOS 9, Debian 11/12/13, Ubuntu 22/24",
+      "price": { "default": 110 }
+    },
+    {
+      "name": "2x Intel Xeon X5670 144GB",
+      "category": "standard",
+      "locations": ["de-germany", "nl-amsterdam", "usa", "tr-istanbul"],
+      "cpu": 12,
+      "cpuThreads": 24,
+      "ram": 144,
+      "storage": 500,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "AlmaLinux 8/9, CentOS 9, Debian 11/12/13, Ubuntu 22/24",
+      "price": { "default": 160 }
+    },
+    {
+      "name": "2x Intel Xeon E5-2690 256GB",
+      "category": "standard",
+      "locations": ["de-germany", "nl-amsterdam", "usa", "tr-istanbul"],
+      "cpu": 16,
+      "cpuThreads": 32,
+      "ram": 256,
+      "storage": 500,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "AlmaLinux 8/9, CentOS 9, Debian 11/12/13, Ubuntu 22/24",
+      "price": { "default": 220 }
+    },
+    {
+      "name": "2x Intel Xeon E5-2697 v2 384GB",
+      "category": "standard",
+      "locations": ["de-germany", "nl-amsterdam", "usa", "tr-istanbul"],
+      "cpu": 24,
+      "cpuThreads": 48,
+      "ram": 384,
+      "storage": 1000,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "AlmaLinux 8/9, CentOS 9, Debian 11/12/13, Ubuntu 22/24",
+      "price": { "default": 280 }
+    },
+    {
+      "name": "2x Intel Xeon E5-2699 v4 512GB",
+      "category": "standard",
+      "locations": ["de-germany", "nl-amsterdam", "usa", "tr-istanbul"],
+      "cpu": 44,
+      "cpuThreads": 88,
+      "ram": 512,
+      "storage": 1000,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "AlmaLinux 8/9, CentOS 9, Debian 11/12/13, Ubuntu 22/24",
+      "price": { "default": 350 }
+    },
+    {
+      "name": "2x Platinum 8173M 768GB",
+      "category": "standard",
+      "locations": ["de-germany", "nl-amsterdam", "usa", "tr-istanbul"],
+      "cpu": 52,
+      "cpuThreads": 104,
+      "ram": 768,
+      "storage": 2000,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "AlmaLinux 8/9, CentOS 9, Debian 11/12/13, Ubuntu 22/24",
+      "price": { "default": 450 }
+    },
+    {
+      "name": "2x Platinum 8168 768GB",
+      "category": "standard",
+      "locations": ["de-germany", "nl-amsterdam", "usa", "tr-istanbul"],
+      "cpu": 48,
+      "cpuThreads": 96,
+      "ram": 768,
+      "storage": 4000,
+      "network": 10000,
+      "bandwidth": "unlimited",
+      "os": "AlmaLinux 8/9, CentOS 9, Debian 11/12/13, Ubuntu 22/24",
+      "price": { "default": 800 }
+    },
+    {
+      "name": "2x Platinum 8168 1024GB",
+      "category": "standard",
+      "locations": ["de-germany", "nl-amsterdam", "usa", "tr-istanbul"],
+      "cpu": 48,
+      "cpuThreads": 96,
+      "ram": 1024,
+      "storage": 6000,
+      "network": 10000,
+      "bandwidth": "unlimited",
+      "os": "AlmaLinux 8/9, CentOS 9, Debian 11/12/13, Ubuntu 22/24",
+      "price": { "default": 900 }
+    },
+    {
+      "name": "Intel Xeon E3-1240v2 16GB",
+      "category": "bulletproof",
+      "cpu": 4,
+      "cpuThreads": 8,
+      "ram": 16,
+      "storage": 250,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "Все. Любая, на выбор",
+      "price": { "bulletproof": 180 }
+    },
+    {
+      "name": "Intel Xeon E3-1240v2 32GB",
+      "category": "bulletproof",
+      "cpu": 4,
+      "cpuThreads": 8,
+      "ram": 32,
+      "storage": 250,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "Все. Любая, на выбор",
+      "price": { "bulletproof": 210 }
+    },
+    {
+      "name": "2x Intel Xeon X5670 64GB",
+      "category": "bulletproof",
+      "cpu": 12,
+      "cpuThreads": 24,
+      "ram": 64,
+      "storage": 250,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "Все. Любая, на выбор",
+      "price": { "bulletproof": 249 }
+    },
+    {
+      "name": "2x Intel Xeon X5670 144GB",
+      "category": "bulletproof",
+      "cpu": 12,
+      "cpuThreads": 24,
+      "ram": 144,
+      "storage": 500,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "Все. Любая, на выбор",
+      "price": { "bulletproof": 350 }
+    },
+    {
+      "name": "2x Intel Xeon E5-2690 256GB",
+      "category": "bulletproof",
+      "cpu": 16,
+      "cpuThreads": 32,
+      "ram": 256,
+      "storage": 500,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "Все. Любая, на выбор",
+      "price": { "bulletproof": 499 }
+    },
+    {
+      "name": "2x Intel Xeon E5-2697 v2 384GB",
+      "category": "bulletproof",
+      "cpu": 24,
+      "cpuThreads": 48,
+      "ram": 384,
+      "storage": 1000,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "Все. Любая, на выбор",
+      "price": { "bulletproof": 590 }
+    },
+    {
+      "name": "2x Intel Xeon E5-2699 v4 512GB",
+      "category": "bulletproof",
+      "cpu": 44,
+      "cpuThreads": 88,
+      "ram": 512,
+      "storage": 1000,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "Все. Любая, на выбор",
+      "price": { "bulletproof": 780 }
+    },
+    {
+      "name": "2x Platinum 8173M 768GB",
+      "category": "bulletproof",
+      "cpu": 52,
+      "cpuThreads": 104,
+      "ram": 768,
+      "storage": 2000,
+      "network": 1000,
+      "bandwidth": "unlimited",
+      "os": "Все. Любая, на выбор",
+      "price": { "bulletproof": 1100 }
+    },
+    {
+      "name": "2x Platinum 8168 768GB",
+      "category": "bulletproof",
+      "cpu": 48,
+      "cpuThreads": 96,
+      "ram": 768,
+      "storage": 8000,
+      "network": 10000,
+      "bandwidth": "unlimited",
+      "os": "Все. Любая, на выбор",
+      "price": { "bulletproof": 1999 }
+    },
+    {
+      "name": "2x Platinum 8168 1024GB",
+      "category": "bulletproof",
+      "cpu": 48,
+      "cpuThreads": 96,
+      "ram": 1024,
+      "storage": 6000,
+      "network": 10000,
+      "bandwidth": "unlimited",
+      "os": "Все. Любая, на выбор",
+      "price": { "bulletproof": 2400 }
+    }
+  ],
+  "domains": {
+    ".com": {
+      "price": 80
+    },
+    ".org": {
+      "price": 80
+    },
+    ".net": {
+      "price": 80
+    },
+    ".biz": {
+      "price": 80
+    },
+    ".club": {
+      "price": 80
+    },
+    ".pro": {
+      "price": 80
+    },
+    ".uk": {
+      "price": 80
+    },
+    ".cc": {
+      "price": 80
+    },
+    ".io": {
+      "price": 99
+    },
+    ".us": {
+      "price": 80
+    },
+    ".at": {
+      "price": 80
+    },
+    ".ca": {
+      "price": 80
+    },
+    ".guru": {
+      "price": 80
+    },
+    ".link": {
+      "price": 80
+    },
+    ".info": {
+      "price": 80
+    },
+    ".ac": { "price": 80 },
+    ".app": { "price": 80 },
+    ".bio": { "price": 80 },
+    ".bot": { "price": 80 },
+    ".cash": { "price": 80 },
+    ".co": { "price": 80 },
+    ".dev": { "price": 80 },
+    ".energy": { "price": 80 },
+    ".host": { "price": 80 },
+    ".money": { "price": 80 },
+    ".my": { "price": 80 },
+    ".one": { "price": 80 },
+    ".pw": { "price": 80 },
+    ".shop": { "price": 80 },
+    ".site": { "price": 80 },
+    ".skin": { "price": 80 },
+    ".team": { "price": 80 },
+    ".top": { "price": 80 },
+    ".vip": { "price": 80 }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "trigger": {
+    "type": "METRIC",
+    "metric": {
+      "source": "vmm",
+      "metric": "cpu",
+      "aggregation": "avg",
+      "lookbackHours": 24,
+      "thresholdPercent": 70
+    }
+  },
+  "conditions": {
+    "rules": [
+      { "field": "cpu_avg_24h", "operator": "gte", "value": 70 }
+    ],
+    "cooldownHours": 168
+  },
+  "steps": [
+    {
+      "id": "usage_upsell",
+      "templateKey": "usage_upgrade",
+      "offerVariantKey": "upgrade_discount",
+      "delayHours": 0
+    }
+  ],
+  "offers": {
+    "upgrade_discount": {
+      "key": "upgrade_discount",
+      "type": "discount_percent",
+      "scope": "upgrade",
+      "value": 10,
+      "ttlHours": 48,
+      "autoApply": true,
+      "claimButton": false
+    }
+  },
+  "templates": {
+    "usage_upgrade": {
+      "key": "usage_upgrade",
+      "ru": {
+        "text": "Нагрузка на VDS близка к лимиту. Апгрейд до тарифа выше — +40% ресурсов, без даунтайма. Скидка 10% на 48ч."
+      },
+      "en": {
+        "text": "VDS load is near limit. Upgrade to next plan — +40% resources, no downtime. 10% discount for 48h."
+      }
+    }
+  },
+  "throttle": { "perUserPerScenarioHours": 168 },
+  "attribution": { "conversionWindowHours": 72, "successEvent": "upgrade", "model": "last_touch" }
+}

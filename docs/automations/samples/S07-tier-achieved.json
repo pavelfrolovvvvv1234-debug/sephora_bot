@@ -1,0 +1,33 @@
+{
+  "trigger": {
+    "type": "EVENT",
+    "eventNames": ["tier.achieved"]
+  },
+  "conditions": {
+    "rules": [
+      { "field": "tier", "operator": "in", "value": ["silver", "gold", "platinum"] }
+    ]
+  },
+  "steps": [
+    {
+      "id": "tier_notify",
+      "templateKey": "tier_message",
+      "delayHours": 0
+    }
+  ],
+  "offers": {},
+  "templates": {
+    "tier_message": {
+      "key": "tier_message",
+      "ru": {
+        "text": "Вы перешли в {{tier}}. Теперь +{{bonus_percent}}% к каждому пополнению."
+      },
+      "en": {
+        "text": "You moved to {{tier}}. Now +{{bonus_percent}}% on every top-up."
+      },
+      "variables": ["tier", "bonus_percent"]
+    }
+  },
+  "throttle": { "perUserPerScenarioHours": 72 },
+  "attribution": { "conversionWindowHours": 72, "successEvent": "deposit", "model": "last_touch" }
+}

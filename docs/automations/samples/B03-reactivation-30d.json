@@ -1,0 +1,42 @@
+{
+  "trigger": {
+    "type": "SCHEDULE",
+    "schedule": { "type": "cron", "expression": "0 10 * * *" }
+  },
+  "conditions": {
+    "rules": [
+      { "field": "balance", "operator": "eq", "value": 0 },
+      { "field": "last_activity_days", "operator": "gte", "value": 30 },
+      { "field": "has_active_services", "operator": "eq", "value": 0 }
+    ]
+  },
+  "segment": { "segmentKey": "inactive_30d" },
+  "steps": [
+    {
+      "id": "reactivation",
+      "templateKey": "reactivation_15",
+      "offerVariantKey": "reactivation_offer",
+      "delayHours": 0
+    }
+  ],
+  "offers": {
+    "reactivation_offer": {
+      "key": "reactivation_offer",
+      "type": "bonus_percent",
+      "scope": "deposit",
+      "value": 15,
+      "ttlHours": 48,
+      "autoApply": true,
+      "claimButton": false
+    }
+  },
+  "templates": {
+    "reactivation_15": {
+      "key": "reactivation_15",
+      "ru": { "text": "Вернитесь и получите +15% к депозиту!" },
+      "en": { "text": "Come back and get +15% on your deposit!" }
+    }
+  },
+  "throttle": { "perUserPerScenarioHours": 168 },
+  "attribution": { "conversionWindowHours": 72, "successEvent": "deposit", "model": "last_touch" }
+}
