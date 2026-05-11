@@ -897,7 +897,7 @@ export function startResellerApiServer(options: ResellerApiOptions): void {
         plan.cpu,
         plan.ram,
         osId,
-        `Reseller:${resellerId},Client:${clientExternalId},Plan:${plan.name}`,
+        `SephoraHost|Reseller:${resellerId}|Client:${clientExternalId}|Plan:${plan.name}`,
         plan.ssd,
         1,
         plan.network,

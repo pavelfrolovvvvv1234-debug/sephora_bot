@@ -1127,19 +1127,16 @@ provisioning-complete-enter-message = Отправьте финальное со
 provisioning-completed = Тикет помечен как завершенный.
 provisioning-user-ready-message = <strong>✅ Ваш выделенный сервер готов</strong>\n\n<strong>Данные для доступа:</strong>\n{$message}\n\nЕсли потребуется помощь с настройкой — пожалуйста, сообщите нашему саппорту @sephora_sup.
 dedicated-provisioning-ticket-created =
-    ✓ <b>Заказ принят</b>
+    ✓ <b>Заказ принят — спасибо!</b>
 
-    Сервер настраивается вручную: как только он будет готов, мы пришлём доступы сюда, в Telegram.
+    Мы уже взяли ваш заказ в работу: сервер поднимем и настроим вручную, это обычно немного дольше, чем мгновенная выдача. Как только всё будет готово, пришлём логин, пароль и данные для входа <b>сюда же в Telegram</b> — ничего искать не нужно.
 
-    <b>Что заказано</b>
-    План: <code>{$serviceName}</code>
-    Локация: <code>{$location}</code>
-    Система: <code>{$os}</code>
+    <b>Напомню, что выбрали:</b>
+    тариф <code>{$serviceName}</code>, локация <code>{$location}</code>, система <code>{$os}</code>.
 
-    <b>Номера заказа</b>
-    Заявка <code>#{$ticketId}</code> · Заказ <code>#{$orderId}</code>
+    Если понадобятся номера для связи с поддержкой: заявка <code>#{$ticketId}</code>, заказ <code>#{$orderId}</code>.
 
-    <i>Управление сервером — в «Главное меню → Мои услуги».</i>
+    <i>Дальше сервер можно будет смотреть в «Главное меню → Мои услуги».</i>
 dedicated-provisioning-staff-notification = <strong>🛠 Новый тикет настройки dedicated</strong>\nТикет: <code>#{$ticketId}</code>\nЗаказ: <code>#{$orderId}</code>\nКлиент: {$userId}\nСумма: {$amount} $\nСервер: {$serviceName}\nЛокация: {$location}\nОС: {$os}
 
 ticket-status-pending_review = 🟡 На проверке

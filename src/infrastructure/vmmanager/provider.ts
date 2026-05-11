@@ -29,6 +29,8 @@ export interface VmProvider {
   reinstallOS(id: number, osId: number, password?: string, managementDescription?: string): Promise<unknown>;
   changePasswordVM(id: number): Promise<string>;
   changePasswordVMCustom(id: number, password: string): Promise<boolean>;
+  /** Proxmox: last failure detail after createVM returned false (optional). */
+  getLastCreateVmFailureDetail?(): string;
   destroy?(): void;
 }
 

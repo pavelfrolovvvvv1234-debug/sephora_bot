@@ -1114,19 +1114,16 @@ provisioning-complete-enter-message = Send final message for customer (credentia
 provisioning-completed = Ticket marked as completed.
 provisioning-user-ready-message = <strong>✅ Your dedicated server is ready</strong>\n\n<strong>Access details:</strong>\n{$message}\n\nIf you need help with setup, please contact our support @sephora_sup.
 dedicated-provisioning-ticket-created =
-    ✓ <b>Order received</b>
+    ✓ <b>Order received — thank you!</b>
 
-    Your server is being prepared manually. When it's ready, we'll send the access details here in Telegram.
+    We’ve picked up your order: the server is provisioned and configured manually, so it may take a bit longer than an instant VPS. Once everything is ready, we’ll send login details and access info <b>right here in Telegram</b> — you won’t need to hunt for an email.
 
-    <b>What you ordered</b>
-    Plan: <code>{$serviceName}</code>
-    Location: <code>{$location}</code>
-    Operating system: <code>{$os}</code>
+    <b>Quick recap of your choices:</b>
+    plan <code>{$serviceName}</code>, location <code>{$location}</code>, OS <code>{$os}</code>.
 
-    <b>Reference</b>
-    Request <code>#{$ticketId}</code> · Order <code>#{$orderId}</code>
+    For support, mention ticket <code>#{$ticketId}</code> and order <code>#{$orderId}</code>.
 
-    <i>Manage your service under Main menu → My services.</i>
+    <i>Later you’ll find the server under Main menu → My services.</i>
 dedicated-provisioning-staff-notification = <strong>🛠 New dedicated setup ticket</strong>\nTicket: <code>#{$ticketId}</code>\nOrder: <code>#{$orderId}</code>\nUser: {$userId}\nAmount: {$amount} $\nServer: {$serviceName}\nLocation: {$location}\nOS: {$os}
 
 ticket-status-pending_review = 🟡 Pending review

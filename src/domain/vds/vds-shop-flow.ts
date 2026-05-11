@@ -14,14 +14,16 @@ import {
   assertVdsCatalogLength,
   VDS_INDEX_TIER,
   VDS_SHOP_PAGE_SIZE,
+  warnIfVdsCatalogDrift,
   type VpsShopTier,
 } from "./vds-shop-config.js";
 import { showTopupForMissingAmount } from "../../helpers/deposit-money.js";
 import { DedicatedProvisioningService } from "../dedicated/DedicatedProvisioningService.js";
 import { DedicatedOrderPaymentStatus } from "../../entities/DedicatedServerOrder.js";
 import { getModeratorChatId } from "../../shared/moderator-chat.js";
-import { DEDICATED_OS_KEYS } from "../dedicated/dedicated-shop-config.js";
 import { getProxmoxTemplateMap, isProxmoxEnabled } from "../../app/config.js";
+import type { VmProvider } from "../../infrastructure/vmmanager/provider.js";
+import { VPS_LINUX_OS_KEYS, isVpsLinuxOsKey } from "../../shared/vps-linux-os-keys.js";
 import ms from "../../lib/multims.js";
 import {
   buildPremiumVpsReadyHtml,
@@ -32,14 +34,9 @@ import {
 
 const TIER_ORDER: VpsShopTier[] = ["start", "standard", "performance", "enterprise"];
 
-/** Remove inline keyboard from the message that triggered the callback (e.g. OS picker). */
-async function stripCallbackMessageKeyboard(ctx: AppContext): Promise<void> {
-  await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() }).catch(() => {});
-}
-
-/** Proxmox clone + wait + resize routinely exceeds 30s; ISP VMManager is usually faster. */
+/** Proxmox: clone task poll + full clone + resize can exceed several minutes; keep below Telegram callback limits where possible. */
 function vpsCreateVmRaceTimeoutMs(): number {
-  return isProxmoxEnabled() ? 240_000 : 30_000;
+  return isProxmoxEnabled() ? 90 * 60 * 1000 : 30_000;
 }
 
 const isUniqueVdsIdConflictError = (error: unknown): boolean => {
@@ -224,7 +221,12 @@ async function createVpsOrderDirect(
     await ctx.reply(ctx.t("bad-error"), { parse_mode: "HTML" }).catch(() => {});
     return false;
   }
+  warnIfVdsCatalogDrift(pricesList.virtual_vds ?? []);
   if (!osKey) {
+    await ctx.reply(ctx.t("bad-error"), { parse_mode: "HTML" }).catch(() => {});
+    return false;
+  }
+  if (!isVpsLinuxOsKey(osKey)) {
     await ctx.reply(ctx.t("bad-error"), { parse_mode: "HTML" }).catch(() => {});
     return false;
   }
@@ -256,12 +258,27 @@ async function createVpsOrderDirect(
 
   let deducted = false;
   const chatId = ctx.chat?.id;
-  const waitMessage = chatId
-    ? await ctx.reply(ctx.t("vds-provisioning-wait"), {
+  /** Same message as OS picker → replace text so «После выбора ОС…» does not stay visible. */
+  let provisioningWaitMessageId: number | undefined;
+  const cqMsg = ctx.callbackQuery?.message;
+  if (cqMsg && chatId && "message_id" in cqMsg) {
+    const ok = await ctx
+      .editMessageText(ctx.t("vds-provisioning-wait"), {
         parse_mode: "HTML",
         link_preview_options: { is_disabled: true },
-      }).catch(() => undefined)
-    : undefined;
+        reply_markup: new InlineKeyboard(),
+      })
+      .then(() => true)
+      .catch(() => false);
+    if (ok) provisioningWaitMessageId = cqMsg.message_id;
+  }
+  if (provisioningWaitMessageId == null && chatId) {
+    const sent = await ctx.reply(ctx.t("vds-provisioning-wait"), {
+      parse_mode: "HTML",
+      link_preview_options: { is_disabled: true },
+    }).catch(() => undefined);
+    provisioningWaitMessageId = sent?.message_id;
+  }
 
   try {
     user.balance -= price;
@@ -279,7 +296,7 @@ async function createVpsOrderDirect(
     for (let attempt = 1; attempt <= maxProvisionAttempts; attempt++) {
       const generatedPassword = generatePassword(12);
       const vmName = generateRandomName(13);
-      const comment = `UserID:${user.id},${rate.name},loc:${locationKey ?? "n/a"},os:${osKey},try:${attempt}`;
+      const comment = `SephoraHost|tariff:${rate.name}|UserID:${user.id},loc:${locationKey ?? "n/a"},os:${osKey},try:${attempt}`;
       const vmResult = await Promise.race([
         ctx.vmmanager.createVM(
           vmName,
@@ -296,7 +313,14 @@ async function createVpsOrderDirect(
         new Promise<false>((resolve) => setTimeout(() => resolve(false), vpsCreateVmRaceTimeoutMs())),
       ]);
       if (!vmResult) {
-        lastProvisionError = new Error("createVM returned false");
+        const vm = ctx.vmmanager as VmProvider & { getLastCreateVmFailureDetail?: () => string };
+        const detail =
+          typeof vm.getLastCreateVmFailureDetail === "function"
+            ? vm.getLastCreateVmFailureDetail()?.trim() ?? ""
+            : "";
+        lastProvisionError = new Error(
+          detail ? `createVM returned false (${detail})` : "createVM returned false"
+        );
         continue;
       }
 
@@ -353,8 +377,20 @@ async function createVpsOrderDirect(
     }
 
     if (!savedVds) {
-      const baseMessage = "Failed to save VPS after retrying VMID conflicts";
-      const reason = String((lastProvisionError as { message?: string })?.message ?? "").trim();
+      const msgFromLast = String((lastProvisionError as { message?: string })?.message ?? "").trim();
+      if (msgFromLast.includes("createVM returned false")) {
+        const open = msgFromLast.indexOf("(");
+        const close = msgFromLast.lastIndexOf(")");
+        const inner =
+          open !== -1 && close > open ? msgFromLast.slice(open + 1, close).trim() : "";
+        throw new Error(
+          inner
+            ? `VPS provisioning failed: ${inner}`
+            : "VPS provisioning failed: hypervisor createVM returned false (see bot logs: PROXMOX_TEMPLATE_MAP, storage, clone/resize; for hostname TLS use PROXMOX_INSECURE_TLS=1 if needed)."
+        );
+      }
+      const baseMessage = "Failed to save VPS after retrying database VMID conflicts";
+      const reason = msgFromLast;
       throw new Error(reason ? `${baseMessage}: ${reason}` : baseMessage);
     }
 
@@ -378,8 +414,8 @@ async function createVpsOrderDirect(
       password: savedVds.password,
     };
     const readyHtml = buildPremiumVpsReadyHtml(ctx, payload);
-    if (waitMessage && chatId) {
-      await ctx.api.deleteMessage(chatId, waitMessage.message_id).catch(() => {});
+    if (provisioningWaitMessageId != null && chatId) {
+      await ctx.api.deleteMessage(chatId, provisioningWaitMessageId).catch(() => {});
     }
     await ctx.reply(readyHtml, {
       parse_mode: "HTML",
@@ -387,9 +423,9 @@ async function createVpsOrderDirect(
     }).catch(() => {});
     return true;
   } catch (error: any) {
-    if (waitMessage && chatId) {
+    if (provisioningWaitMessageId != null && chatId) {
       await ctx.api
-        .editMessageText(chatId, waitMessage.message_id, ctx.t("vps-provisioning-failed"), {
+        .editMessageText(chatId, provisioningWaitMessageId, ctx.t("vps-provisioning-failed"), {
           parse_mode: "HTML",
           link_preview_options: { is_disabled: true },
         })
@@ -449,8 +485,21 @@ async function showVpsOsPicker(ctx: AppContext, rateId: number, locationKey: str
   session.other.dedicatedOrder.selectedLocationKey = locationKey;
   session.other.vdsRate.selectedRateId = rateId;
 
+  const templateMap = isProxmoxEnabled() ? getProxmoxTemplateMap() : null;
+  const osKeys = templateMap
+    ? VPS_LINUX_OS_KEYS.filter((k) => Number(templateMap[k as string] ?? 0) > 0)
+    : [...VPS_LINUX_OS_KEYS];
+
+  if (osKeys.length === 0) {
+    await ctx.editMessageText(
+      "Для автоматической выдачи VPS в Proxmox задайте <code>PROXMOX_TEMPLATE_MAP</code> с Linux-шаблонами (ключи как в списке тарифов).",
+      { parse_mode: "HTML", reply_markup: new InlineKeyboard().text(ctx.t("button-back"), `vsh:card:${rateId}`) }
+    );
+    return;
+  }
+
   const kb = new InlineKeyboard();
-  for (const key of DEDICATED_OS_KEYS) {
+  for (const key of osKeys) {
     kb.text(ctx.t(`dedicated-os-${key}` as any), `vsh:os:${key}`).row();
   }
   kb.text(ctx.t("button-back"), `vsh:loc_back:${rateId}`).row();
@@ -551,6 +600,7 @@ export async function showVpsShopStep3List(ctx: AppContext, page?: number): Prom
   const pricesList = await prices();
   const list = pricesList.virtual_vds ?? [];
   assertVdsCatalogLength(list.length);
+  warnIfVdsCatalogDrift(list);
 
   const ids =
     tier == null ? list.map((_, idx) => idx) : getVdsIndicesForTier(list, tier);
@@ -741,7 +791,6 @@ export function registerVpsShopHandlers(bot: Bot<AppContext>): void {
       await ctx.reply(ctx.t("bad-error"), { parse_mode: "HTML" }).catch(() => {});
       return;
     }
-    await stripCallbackMessageKeyboard(ctx as AppContext);
     if (isProxmoxEnabled()) {
       await createVpsOrderDirect(ctx, rateId, locationKey, osKey);
       return;

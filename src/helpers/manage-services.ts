@@ -5,6 +5,7 @@ import DomainRequest, { DomainRequestStatus } from "@/entities/DomainRequest";
 import Domain from "@/entities/Domain";
 import { getAppDataSource } from "@/database";
 import { InlineKeyboard } from "grammy";
+import type { InlineKeyboardButton } from "grammy/types";
 import VirtualDedicatedServer, {
   generatePassword,
 } from "@/entities/VirtualDedicatedServer";
@@ -17,7 +18,8 @@ import { TopUpRepository } from "@/infrastructure/db/repositories/TopUpRepositor
 import { buildServiceInfoBlock } from "@/shared/service-panel";
 import { ServicePaymentService } from "@/domain/billing/ServicePaymentService";
 import { createInitialOtherSession } from "@/shared/session-initial.js";
-import { getVmManagerAllowedOsIds } from "../app/config.js";
+import { getVmManagerAllowedOsIds, isProxmoxEnabled } from "../app/config.js";
+import { isVpsLinuxOsKey } from "../shared/vps-linux-os-keys.js";
 import { escapeUserInput } from "./formatting.js";
 import { humanizeVmmOsName } from "../shared/vmm-os-display.js";
 import { clearedInlineKeyboard } from "../shared/cleared-inline-keyboard.js";
@@ -459,14 +461,16 @@ export const vdsReinstallOs = new Menu<AppContext>("vds-select-os-reinstall")
     let count = 0;
     const allowedOsIds = getVmManagerAllowedOsIds();
     osList.list
-      .filter(
-        (os) =>
+      .filter((os) => {
+        const base =
           allowedOsIds.has(os.id) ||
           (!os.adminonly &&
             os.name != "NoOS" &&
             os.state == "active" &&
-            os.repository != "ISPsystem LXD")
-      )
+            os.repository != "ISPsystem LXD");
+        if (isProxmoxEnabled()) return base && isVpsLinuxOsKey(os.name);
+        return base;
+      })
       .forEach((os) => {
         const label = humanizeVmmOsName(os.name);
         range.text({ text: label, payload: `ros-${os.id}` }, async (ctx) => {
@@ -1451,10 +1455,39 @@ export const vdsManageServiceMenu = new Menu<AppContext>(
 export async function openVdsManageServicesListScreen(ctx: AppContext): Promise<void> {
   const session = await ctx.session;
   ensureManageVdsSession(session);
-  await ctx.editMessageText(ctx.t("vds-manage-title"), {
-    parse_mode: "HTML",
-    reply_markup: vdsManageServiceMenu,
-  });
+  session.other.manageVds.expandedId = null;
+  session.other.manageVds.lastPickedId = -1;
+  session.other.manageVds.showPassword = false;
+  (session.other.manageVds as any).panelMode = "main";
+
+  const body = buildVdsManageText(ctx, null, null, false);
+  // When opening from the welcome `main-menu`, `ctx.menu` is tied to main-menu; passing a child Menu
+  // as reply_markup may not be converted by the API wrapper. Render explicitly so callbacks work.
+  const inlineKeyboard = await (
+    vdsManageServiceMenu as unknown as { render(c: AppContext): Promise<InlineKeyboardButton[][]> }
+  ).render(ctx);
+  const keyboardOpts = {
+    parse_mode: "HTML" as const,
+    reply_markup: { inline_keyboard: inlineKeyboard },
+    link_preview_options: { is_disabled: true },
+  };
+
+  try {
+    await ctx.editMessageText(body, keyboardOpts);
+  } catch (err: unknown) {
+    const msg = err && typeof err === "object" && "description" in err ? String((err as any).description) : "";
+    if (msg.includes("message is not modified")) {
+      return;
+    }
+    try {
+      await ctx.reply(body, keyboardOpts);
+    } catch {
+      await ctx.answerCallbackQuery({
+        text: ctx.t("bad-error").slice(0, 200),
+        show_alert: true,
+      }).catch(() => {});
+    }
+  }
 }
 
 export const domainManageServicesMenu = new Menu<AppContext>(

@@ -208,6 +208,7 @@ async function ensurePrimePaidAfterTrial(ctx: AppContext, session: SessionData):
 
 export const mainMenu = new Menu<AppContext>("main-menu", { autoAnswer: false, onMenuOutdated: false })
   .text((ctx) => ctx.t("button-purchase"), async (ctx) => {
+    await ctx.answerCallbackQuery().catch(() => {});
     await openVpsTariffSelection(ctx as AppContext);
   })
   .row()

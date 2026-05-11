@@ -19,7 +19,8 @@ import { createInitialOtherSession } from "../shared/session-initial.js";
 import {
   showDomainCategoryTlds,
 } from "../domain/domains/domain-purchase-flow.js";
-import { getVmManagerAllowedOsIds } from "../app/config.js";
+import { getVmManagerAllowedOsIds, isProxmoxEnabled } from "../app/config.js";
+import { isVpsLinuxOsKey } from "../shared/vps-linux-os-keys.js";
 import { humanizeVmmOsName } from "../shared/vmm-os-display.js";
 import { clearedInlineKeyboard } from "../shared/cleared-inline-keyboard.js";
 import { DedicatedProvisioningService } from "../domain/dedicated/DedicatedProvisioningService.js";
@@ -417,14 +418,16 @@ export const vdsRateOs = new Menu<AppContext>("vds-select-os").dynamic(
     let count = 0;
     const allowedOsIds = getVmManagerAllowedOsIds();
     osList.list
-      .filter(
-        (os) =>
+      .filter((os) => {
+        const base =
           allowedOsIds.has(os.id) ||
           (!os.adminonly &&
             os.name != "NoOS" &&
             os.state == "active" &&
-            os.repository != "ISPsystem LXD")
-      )
+            os.repository != "ISPsystem LXD");
+        if (isProxmoxEnabled()) return base && isVpsLinuxOsKey(os.name);
+        return base;
+      })
       .forEach((os) => {
         const label = humanizeVmmOsName(os.name);
         range.text({ text: label, payload: `vos-${os.id}` }, async (ctx) => {

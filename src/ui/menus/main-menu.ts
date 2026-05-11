@@ -25,7 +25,6 @@ export const mainMenu = new Menu<AppContext>("main-menu")
     await ctx.answerCallbackQuery().catch(() => {});
     await openVdsManageServicesListScreen(ctx);
   })
-  .row()
   .submenu(
     (ctx) => ctx.t("button-personal-profile"),
     "profile-menu",

@@ -15,6 +15,7 @@ import type {
   Os,
 } from "../../api/vmmanager.js";
 import type { VmProvider } from "./provider.js";
+import { isVpsLinuxOsKey } from "../../shared/vps-linux-os-keys.js";
 
 type ProxmoxTemplate = {
   vmid: number;
@@ -66,6 +67,7 @@ export class ProxmoxProvider implements VmProvider {
   private readonly httpTimeoutMs: number;
   private clusterNodeNamesCache: { names: string[]; at: number } | null = null;
   private readonly clusterNodeNamesTtlMs = 60_000;
+  private lastCreateVmFailureDetail = "";
 
   constructor() {
     this.baseUrl = (config.PROXMOX_BASE_URL ?? process.env.PROXMOX_BASE_URL ?? "").trim().replace(/\/+$/, "");
@@ -93,7 +95,21 @@ export class ProxmoxProvider implements VmProvider {
       httpsAgent: insecureTls ? new https.Agent({ rejectUnauthorized: false }) : undefined,
     });
 
-    Logger.info("Proxmox provider initialized");
+    Logger.info(
+      insecureTls
+        ? "Proxmox provider initialized (TLS certificate verification disabled for this API URL)"
+        : "Proxmox provider initialized (TLS verification enabled)"
+    );
+  }
+
+  /** Exposed for VPS shop flow when `createVM` returns false. */
+  getLastCreateVmFailureDetail(): string {
+    return this.lastCreateVmFailureDetail;
+  }
+
+  private recordProvisionFailure(detail: string): void {
+    const t = detail.trim();
+    if (t) this.lastCreateVmFailureDetail = t.slice(0, 2000);
   }
 
   private isRetryableTransportError(error: unknown): boolean {
@@ -107,6 +123,54 @@ export class ProxmoxProvider implements VmProvider {
     // Retry 502/503/504 from proxy / pveproxy under load
     if ([502, 503, 504].includes(status)) return true;
     return false;
+  }
+
+  /** Flatten Proxmox / Axios error body for logs and retry heuristics. */
+  private extractProxmoxErrorMessage(error: unknown): string {
+    const e = error as any;
+    const raw = e?.response?.data;
+    if (raw && typeof raw === "object") {
+      const err = (raw as { errors?: unknown; message?: string }).errors;
+      if (typeof err === "string") return err;
+      if (err && typeof err === "object") {
+        try {
+          return JSON.stringify(err);
+        } catch {
+          return String(err);
+        }
+      }
+      const msg = (raw as { message?: string }).message;
+      if (typeof msg === "string" && msg.trim()) return msg;
+    }
+    return String(e?.message ?? error ?? "");
+  }
+
+  /**
+   * Whether createVM should take another pass (new /cluster/nextid, clone again).
+   * Covers VMID races, HA locks, transient proxy errors — not TLS misconfig or auth.
+   */
+  private shouldRetryProvisioningAfterError(error: unknown, detail: string): boolean {
+    if (this.isRetryableTransportError(error)) return true;
+    const d = detail.toLowerCase();
+    if (d.includes("unable to verify") || d.includes("certificate") || d.includes("self signed")) return false;
+    if (d.includes("401") || d.includes("403") || d.includes("permission") || d.includes("authentication"))
+      return false;
+    const status = Number((error as any)?.response?.status ?? 0);
+    if (status === 409) return true;
+    if (
+      /\balready exist/.test(d) ||
+      /\bduplicate\b/.test(d) ||
+      /\bvmid\b.*\bexist/.test(d) ||
+      /\bvm id\b.*\bexist/.test(d) ||
+      /\bvm \d+ already exists\b/.test(d) ||
+      /\bconflict\b/.test(d) ||
+      (d.includes("lock") && d.includes("timeout")) ||
+      d.includes("got timeout") ||
+      d.includes("try again")
+    ) {
+      return true;
+    }
+    return [502, 503, 504].includes(status);
   }
 
   private async apiGet<T>(url: string): Promise<T> {
@@ -126,8 +190,22 @@ export class ProxmoxProvider implements VmProvider {
 
   private async apiPost<T>(url: string, body?: Record<string, unknown>): Promise<T> {
     const run = async (): Promise<T> => {
-      const { data } = await this.client.post<{ data: T }>(url, body ?? {});
-      return data.data;
+      // Proxmox API expects HTML form encoding for POST bodies (not JSON) for most write calls.
+      const flat = body ?? {};
+      const keys = Object.keys(flat).filter((k) => flat[k] !== undefined && flat[k] !== null);
+      let response;
+      if (keys.length === 0) {
+        response = await this.client.post<{ data: T }>(url);
+      } else {
+        const params = new URLSearchParams();
+        for (const k of keys) {
+          params.append(k, String(flat[k]));
+        }
+        response = await this.client.post<{ data: T }>(url, params.toString(), {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        });
+      }
+      return response.data.data;
     };
     return retry(run, {
       maxAttempts: 3,
@@ -137,6 +215,60 @@ export class ProxmoxProvider implements VmProvider {
         if (!this.isRetryableTransportError(err)) throw err;
       },
     });
+  }
+
+  /** Proxmox uses PUT for some write operations (e.g. qemu disk resize). Same form body as {@link apiPost}. */
+  private async apiPut<T>(url: string, body?: Record<string, unknown>): Promise<T> {
+    const run = async (): Promise<T> => {
+      const flat = body ?? {};
+      const keys = Object.keys(flat).filter((k) => flat[k] !== undefined && flat[k] !== null);
+      let response;
+      if (keys.length === 0) {
+        response = await this.client.put<{ data: T }>(url);
+      } else {
+        const params = new URLSearchParams();
+        for (const k of keys) {
+          params.append(k, String(flat[k]));
+        }
+        response = await this.client.put<{ data: T }>(url, params.toString(), {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        });
+      }
+      return response.data.data;
+    };
+    return retry(run, {
+      maxAttempts: 3,
+      delayMs: 800,
+      exponentialBackoff: true,
+      onRetry: (_attempt, err) => {
+        if (!this.isRetryableTransportError(err)) throw err;
+      },
+    });
+  }
+
+  /**
+   * Extend QEMU disk (PVE API viewer: HTTP PUT …/qemu/{vmid}/resize — POST returns 501 "not implemented").
+   * Fallback: same path with query string if a proxy strips PUT bodies.
+   */
+  private async qemuResizeDisk(node: string, vmid: number, diskKey: string, size: string): Promise<void> {
+    const path = `/nodes/${node}/qemu/${vmid}/resize`;
+    const body = { disk: diskKey, size };
+    try {
+      await this.apiPut(path, body);
+      return;
+    } catch (first) {
+      const msg = this.extractProxmoxErrorMessage(first).toLowerCase();
+      const status = Number((first as any)?.response?.status ?? 0);
+      const retry =
+        status === 501 ||
+        msg.includes("not implemented") ||
+        (msg.includes("resize") && msg.includes("post"));
+      if (!retry) throw first;
+      Logger.warn(`Proxmox qemuResizeDisk vmid=${vmid}: PUT form failed (${msg}), retrying PUT with query string`);
+    }
+    const qs = new URLSearchParams({ disk: diskKey, size }).toString();
+    const { data } = await this.client.put<{ data: unknown }>(`${path}?${qs}`);
+    void data;
   }
 
   private async apiDelete<T>(url: string): Promise<T> {
@@ -154,10 +286,60 @@ export class ProxmoxProvider implements VmProvider {
     });
   }
 
+  /** Poll PVE async task (clone returns UPID string in `data`). */
+  private async waitForTaskFinished(
+    primaryNode: string,
+    upid: string,
+    timeoutMs = 900_000
+  ): Promise<{ ok: boolean; detail: string }> {
+    const encoded = encodeURIComponent(upid);
+    const nodes = [...new Set([primaryNode, this.node].filter((n): n is string => Boolean(n?.trim())))];
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      for (const node of nodes) {
+        try {
+          const st = await this.apiGet<{ status?: string; exitstatus?: string }>(
+            `/nodes/${node}/tasks/${encoded}/status`
+          );
+          const status = String(st?.status ?? "").toLowerCase();
+          if (status === "stopped") {
+            const exit = String(st?.exitstatus ?? "");
+            const ok = exit.toUpperCase() === "OK";
+            if (!ok) {
+              const tail = await this.fetchTaskLogTail(node, encoded).catch(() => "");
+              return {
+                ok: false,
+                detail: tail ? `${exit || "ERR"}: ${tail}` : exit || "clone task failed",
+              };
+            }
+            return { ok: true, detail: "" };
+          }
+        } catch {
+          continue;
+        }
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    return { ok: false, detail: "clone task status timeout" };
+  }
+
+  private async fetchTaskLogTail(node: string, upidEncoded: string, maxLines = 12): Promise<string> {
+    const rows = await this.apiGet<Array<{ t?: string }>>(`/nodes/${node}/tasks/${upidEncoded}/log`).catch(
+      () => undefined
+    );
+    if (!Array.isArray(rows)) return "";
+    const lines = rows.map((r) => String(r?.t ?? "").trim()).filter(Boolean);
+    return lines.slice(-maxLines).join(" | ");
+  }
+
   private async waitForVmStopped(id: number, timeoutMs = 20000): Promise<void> {
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
-      const status = await this.apiGet<{ status?: string }>(`/nodes/${this.node}/qemu/${id}/status/current`).catch(
+      const node = await this.findQemuNodeHostingVmid(id);
+      if (!node) {
+        return;
+      }
+      const status = await this.apiGet<{ status?: string }>(`/nodes/${node}/qemu/${id}/status/current`).catch(
         () => undefined
       );
       if (!status || status.status === "stopped") {
@@ -178,9 +360,8 @@ export class ProxmoxProvider implements VmProvider {
   private async waitUntilQemuGuestAbsent(vmid: number, timeoutMs = 90000): Promise<boolean> {
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
-      const list = await this.apiGet<Array<{ vmid?: number }>>(`/nodes/${this.node}/qemu`).catch(() => undefined);
-      const exists = Array.isArray(list) && list.some((v) => Number(v.vmid) === vmid);
-      if (!exists) {
+      const host = await this.findQemuNodeHostingVmid(vmid);
+      if (!host) {
         return true;
       }
       await new Promise((resolve) => setTimeout(resolve, 800));
@@ -188,13 +369,14 @@ export class ProxmoxProvider implements VmProvider {
     return false;
   }
 
-  /** After async clone, config may not exist until Proxmox finishes disk copy. */
+  /** After async clone, config may not exist until Proxmox finishes disk copy. Guest may land on target node or briefly elsewhere — resolve node via cluster index. */
   private async waitUntilGuestConfigReadable(vmid: number, timeoutMs = 180000): Promise<boolean> {
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
-      const cfg = await this.apiGet<unknown>(`/nodes/${this.node}/qemu/${vmid}/config`).catch(() => undefined);
-      if (cfg != null) {
-        return true;
+      const node = await this.findQemuNodeHostingVmid(vmid);
+      if (node) {
+        const cfg = await this.apiGet<unknown>(`/nodes/${node}/qemu/${vmid}/config`).catch(() => undefined);
+        if (cfg != null) return true;
       }
       await new Promise((resolve) => setTimeout(resolve, 1200));
     }
@@ -371,17 +553,127 @@ export class ProxmoxProvider implements VmProvider {
     };
   }
 
+  /** QEMU guests flagged as template anywhere in the cluster (for OS list + clone source checks). */
+  private async listClusterQemuTemplateVmids(): Promise<Set<number>> {
+    const out = new Set<number>();
+    try {
+      const resources = await this.apiGet<
+        Array<{ type?: string; vmid?: number; template?: number }>
+      >(`/cluster/resources?type=vm`);
+      if (Array.isArray(resources)) {
+        for (const r of resources) {
+          if (r.type != null && r.type !== "" && r.type !== "qemu") continue;
+          if (Number(r.template) !== 1 || r.vmid == null) continue;
+          out.add(Number(r.vmid));
+        }
+      }
+    } catch {
+      // fall through to node-local list
+    }
+    if (out.size > 0) return out;
+    try {
+      const list = await this.apiGet<ProxmoxTemplate[]>(`/nodes/${this.node}/qemu`);
+      if (Array.isArray(list)) {
+        for (const t of list) {
+          if (t.template === 1 && t.vmid != null) out.add(Number(t.vmid));
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return out;
+  }
+
   async getOsList(): Promise<GetOsListResponse | undefined> {
     try {
-      const templates = await this.apiGet<ProxmoxTemplate[]>(`/nodes/${this.node}/qemu`);
+      const templateVmIds = await this.listClusterQemuTemplateVmids();
       const list = Object.entries(this.templateMap)
-        .filter(([, vmid]) => templates.some((t) => t.vmid === vmid && t.template === 1))
+        .filter(([key, vmid]) => isVpsLinuxOsKey(key) && templateVmIds.has(vmid))
         .map(([key, vmid]) => this.buildOsItem(vmid, key));
       return { last_notify: Date.now(), list };
     } catch (error) {
       Logger.error("Proxmox getOsList failed", error);
       return undefined;
     }
+  }
+
+  /**
+   * QEMU clone must be called on the node where the source template guest exists.
+   * PROXMOX_NODE is often the target for new VMs, not where templates live.
+   */
+  private async findQemuNodeHostingVmid(vmid: number): Promise<string | undefined> {
+    try {
+      const resources = await this.apiGet<
+        Array<{ type?: string; vmid?: number; node?: string }>
+      >(`/cluster/resources?type=vm`);
+      if (Array.isArray(resources)) {
+        const row = resources.find(
+          (r) =>
+            Number(r.vmid) === vmid &&
+            (r.type === "qemu" || r.type === "openvz" || r.type === undefined || r.type === "")
+        );
+        const node = row?.node?.trim();
+        if (node) return node;
+      }
+    } catch (error) {
+      Logger.warn("Proxmox findQemuNodeHostingVmid: cluster/resources failed, scanning nodes", error);
+    }
+    const nodes = await this.listClusterNodeNames();
+    for (const node of nodes) {
+      try {
+        const list = await this.apiGet<Array<{ vmid?: number }>>(`/nodes/${node}/qemu`);
+        if (Array.isArray(list) && list.some((g) => Number(g.vmid) === vmid)) return node;
+      } catch {
+        continue;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * When {@link findQemuNodeHostingVmid} fails, explain via `/cluster/resources` (wrong VM type, missing guest, etc.).
+   */
+  private async explainMissingQemuTemplate(vmid: number): Promise<string> {
+    try {
+      const resources = await this.apiGet<
+        Array<{ type?: string; vmid?: number; node?: string; name?: string }>
+      >(`/cluster/resources?type=vm`);
+      if (Array.isArray(resources)) {
+        const row = resources.find((r) => Number(r.vmid) === vmid);
+        if (row) {
+          const t = String(row.type ?? "").toLowerCase();
+          const where = row.node ? ` on node "${row.node.trim()}"` : "";
+          if (t === "lxc") {
+            return `template vmid=${vmid} is an LXC container${where}, not QEMU — clone needs a KVM template; fix PROXMOX_TEMPLATE_MAP or create a QEMU golden image`;
+          }
+          if (t === "qemu") {
+            return `template vmid=${vmid} appears as QEMU${where} but node lookup failed — check API token can see cluster/nodes and guest is not orphaned`;
+          }
+          return `template vmid=${vmid} has type "${row.type ?? "?"}"${where} — VPS clone requires QEMU (KVM)`;
+        }
+      }
+    } catch {
+      /* fall through */
+    }
+    return `template vmid=${vmid} not in cluster API — in Proxmox create a QEMU template with this VMID or change PROXMOX_TEMPLATE_MAP to your real template VMIDs (Datacenter → cluster → VMs)`;
+  }
+
+  /** Delete guest wherever it lives (clone target may differ from PROXMOX_NODE). */
+  private async purgeQemuGuestBestEffort(vmid: number): Promise<void> {
+    const hosting = await this.findQemuNodeHostingVmid(vmid);
+    const candidates = [...new Set([hosting, this.node].filter((n): n is string => Boolean(n?.trim())))];
+    const nodes = candidates.length > 0 ? candidates : [this.node];
+    for (const node of nodes) {
+      try {
+        await this.apiPost(`/nodes/${node}/qemu/${vmid}/status/stop`).catch(() => {});
+        await new Promise((r) => setTimeout(r, 1200));
+        await this.apiDelete(`/nodes/${node}/qemu/${vmid}?purge=1&skiplock=1`);
+        return;
+      } catch {
+        continue;
+      }
+    }
+    await this.deleteVM(vmid).catch(() => {});
   }
 
   async createVM(
@@ -396,112 +688,211 @@ export class ProxmoxProvider implements VmProvider {
     networkIn: number,
     networkOut: number
   ): Promise<CreateVMSuccesffulyResponse | false> {
-    let newId: number | undefined;
-    const rollbackGuest = async (reason: string): Promise<void> => {
-      if (newId == null) return;
-      try {
-        await this.deleteVM(newId);
-      } catch (cleanupErr) {
-        Logger.warn(`Proxmox createVM: rollback delete failed vmid=${newId} (${reason})`, cleanupErr);
-      }
-    };
-
-    try {
-      const templateId = this.resolveTemplateSourceVmid(osId);
-      if (!templateId) {
-        Logger.warn(`Proxmox template not found for osId=${osId}`);
-        return false;
-      }
-      const nextIdRaw = await this.apiGet<string>(`/cluster/nextid`);
-      const parsedVmId = Number(nextIdRaw);
-      if (Number.isNaN(parsedVmId)) return false;
-      newId = parsedVmId;
-      const autoIpConfig = await this.pickFreeIpv4FromBridge();
-
-      await this.apiPost(`/nodes/${this.node}/qemu/${templateId}/clone`, {
-        newid: newId,
-        name,
-        target: this.node,
-        full: 1,
-        storage: this.storage || undefined,
-      });
-
-      const clonedReady = await this.waitUntilGuestConfigReadable(newId, 180000);
-      if (!clonedReady) {
-        Logger.error(`Proxmox createVM: clone did not produce config within timeout vmid=${newId}`);
-        await rollbackGuest("clone timeout");
-        return false;
-      }
-
-      const baselineCfg =
-        (await this.apiGet<Record<string, unknown>>(`/nodes/${this.node}/qemu/${newId}/config`).catch(() => undefined)) ??
-        {};
-      const diskKey = this.findPrimaryQemuDiskKey(baselineCfg);
-      if (!diskKey) {
-        Logger.error(
-          `Proxmox createVM: could not detect disk slot (expected virtio0/scsi0/...) vmid=${newId} keys=${Object.keys(baselineCfg).join(",")}`
-        );
-        await rollbackGuest("no disk slot");
-        return false;
-      }
-      if (!Number.isFinite(diskSize) || diskSize < 1) {
-        Logger.error(`Proxmox createVM: invalid diskSizeGb=${diskSize} vmid=${newId}`);
-        await rollbackGuest("invalid disk size");
-        return false;
-      }
-
-      await this.apiPost(`/nodes/${this.node}/qemu/${newId}/config`, {
-        cores: cpuNumber,
-        memory: ramSize * 1024,
-        ciuser: "root",
-        cipassword: password,
-        description: comment,
-        net0: this.buildVirtioNet0(networkIn, networkOut),
-        ipconfig0: autoIpConfig?.ipconfig0,
-        nameserver: autoIpConfig?.nameserver,
-      });
-
-      const currentDiskSize = this.parseDiskSizeFromVolume(
-        typeof baselineCfg[diskKey] === "string" ? (baselineCfg[diskKey] as string) : undefined
-      );
-      const currentDiskBytes = this.sizeLiteralToBytes(currentDiskSize);
-      const targetDiskBytes = this.sizeLiteralToBytes(`${diskSize}G`);
-      const shouldResize =
-        targetDiskBytes != null && currentDiskBytes != null
-          ? targetDiskBytes > currentDiskBytes
-          : true;
-
-      if (shouldResize) {
-        try {
-          await this.apiPost(`/nodes/${this.node}/qemu/${newId}/resize`, {
-            disk: diskKey,
-            size: `${diskSize}G`,
-          });
-        } catch (resizeErr) {
-          Logger.error(`Proxmox createVM: disk resize failed vmid=${newId} disk=${diskKey} targetGb=${diskSize}`, resizeErr);
-          await rollbackGuest("resize failed");
-          return false;
-        }
-      } else {
-        Logger.warn(
-          `Proxmox createVM: skip resize shrink vmid=${newId} disk=${diskKey} current=${currentDiskSize ?? "unknown"} target=${diskSize}G`
-        );
-      }
-
-      await this.apiPost(`/nodes/${this.node}/qemu/${newId}/status/start`);
-
-      return {
-        id: newId,
-        task: Date.now(),
-        recipe_task_list: [],
-        recipe_task: 0,
-        spice_task: 0,
-      };
-    } catch (error) {
-      Logger.error("Proxmox createVM failed", error);
-      await rollbackGuest("exception");
+    this.lastCreateVmFailureDetail = "";
+    const templateId = this.resolveTemplateSourceVmid(osId);
+    if (!templateId) {
+      this.recordProvisionFailure(`template not found for osId=${osId}`);
+      Logger.warn(`Proxmox template not found for osId=${osId}`);
       return false;
     }
+    const templateKey =
+      this.reverseTemplateMap[templateId] ??
+      Object.entries(this.templateMap).find(([, v]) => v === templateId)?.[0];
+    if (!templateKey || !isVpsLinuxOsKey(templateKey)) {
+      this.recordProvisionFailure(`not a Sephora Linux template osId=${osId} vmid=${templateId}`);
+      Logger.warn(`Proxmox createVM: template is not a Sephora Linux image osId=${osId} vmid=${templateId}`);
+      return false;
+    }
+
+    const templateNode = await this.findQemuNodeHostingVmid(templateId);
+    if (!templateNode) {
+      const detail = await this.explainMissingQemuTemplate(templateId);
+      this.recordProvisionFailure(detail);
+      Logger.error(
+        `Proxmox createVM: template QEMU vmid=${templateId} not usable for clone (${detail})`
+      );
+      return false;
+    }
+    if (templateNode !== this.node) {
+      Logger.info(
+        `Proxmox createVM: template vmid=${templateId} is on node "${templateNode}", cloning with target="${this.node}"`
+      );
+    }
+
+    const maxAttempts = 6;
+    let lastFailureDetail = "";
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      let newId: number | undefined;
+      const rollbackGuest = async (reason: string): Promise<void> => {
+        if (newId == null) return;
+        try {
+          await this.purgeQemuGuestBestEffort(newId);
+        } catch (cleanupErr) {
+          Logger.warn(`Proxmox createVM: rollback purge failed vmid=${newId} (${reason})`, cleanupErr);
+        }
+      };
+
+      try {
+        const nextIdRaw = await this.apiGet<string>(`/cluster/nextid`);
+        const parsedVmId = Number(nextIdRaw);
+        if (Number.isNaN(parsedVmId)) {
+          lastFailureDetail = `invalid nextid response: ${String(nextIdRaw)}`;
+          if (attempt < maxAttempts) {
+            await new Promise((r) => setTimeout(r, 600));
+            continue;
+          }
+          this.recordProvisionFailure(lastFailureDetail);
+          return false;
+        }
+        newId = parsedVmId;
+        const autoIpConfig = await this.pickFreeIpv4FromBridge();
+
+        const clonePayload: Record<string, unknown> = {
+          newid: newId,
+          name,
+          full: 1,
+        };
+        const storageTrim = this.storage?.trim();
+        if (storageTrim) clonePayload.storage = storageTrim;
+        if (templateNode !== this.node) {
+          clonePayload.target = this.node;
+        }
+
+        const cloneResult = await this.apiPost<string>(
+          `/nodes/${templateNode}/qemu/${templateId}/clone`,
+          clonePayload
+        );
+
+        if (typeof cloneResult === "string" && cloneResult.startsWith("UPID:")) {
+          const taskOutcome = await this.waitForTaskFinished(templateNode, cloneResult, 600_000);
+          if (!taskOutcome.ok) {
+            lastFailureDetail = `clone task: ${taskOutcome.detail}`;
+            Logger.warn(`Proxmox createVM attempt ${attempt}/${maxAttempts}: ${lastFailureDetail}`);
+            await rollbackGuest("clone task failed");
+            if (attempt < maxAttempts) {
+              await new Promise((r) => setTimeout(r, 900 + Math.floor(Math.random() * 600)));
+              continue;
+            }
+            this.recordProvisionFailure(lastFailureDetail);
+            return false;
+          }
+        }
+
+        const clonedReady = await this.waitUntilGuestConfigReadable(newId, 180000);
+        if (!clonedReady) {
+          lastFailureDetail = `clone config not readable within timeout vmid=${newId}`;
+          Logger.warn(`Proxmox createVM attempt ${attempt}/${maxAttempts}: ${lastFailureDetail}`);
+          await rollbackGuest("clone timeout");
+          if (attempt < maxAttempts) {
+            await new Promise((r) => setTimeout(r, 800 + Math.floor(Math.random() * 600)));
+            continue;
+          }
+          this.recordProvisionFailure(lastFailureDetail);
+          return false;
+        }
+
+        const vmNode = (await this.findQemuNodeHostingVmid(newId)) ?? this.node;
+
+        const baselineCfg =
+          (await this.apiGet<Record<string, unknown>>(`/nodes/${vmNode}/qemu/${newId}/config`).catch(() => undefined)) ??
+          {};
+        const diskKey = this.findPrimaryQemuDiskKey(baselineCfg);
+        if (!diskKey) {
+          lastFailureDetail = `no disk slot vmid=${newId} keys=${Object.keys(baselineCfg).join(",")}`;
+          Logger.warn(`Proxmox createVM attempt ${attempt}/${maxAttempts}: ${lastFailureDetail}`);
+          await rollbackGuest("no disk slot");
+          if (attempt < maxAttempts) {
+            await new Promise((r) => setTimeout(r, 800 + Math.floor(Math.random() * 600)));
+            continue;
+          }
+          this.recordProvisionFailure(lastFailureDetail);
+          return false;
+        }
+        if (!Number.isFinite(diskSize) || diskSize < 1) {
+          Logger.error(`Proxmox createVM: invalid diskSizeGb=${diskSize} vmid=${newId}`);
+          await rollbackGuest("invalid disk size");
+          this.recordProvisionFailure(`invalid diskSizeGb=${diskSize}`);
+          return false;
+        }
+
+        await this.apiPost(`/nodes/${vmNode}/qemu/${newId}/config`, {
+          sockets: 1,
+          cores: cpuNumber,
+          memory: ramSize * 1024,
+          ciuser: "root",
+          cipassword: password,
+          description: comment,
+          net0: this.buildVirtioNet0(networkIn, networkOut),
+          ipconfig0: autoIpConfig?.ipconfig0,
+          nameserver: autoIpConfig?.nameserver,
+        });
+
+        const currentDiskSize = this.parseDiskSizeFromVolume(
+          typeof baselineCfg[diskKey] === "string" ? (baselineCfg[diskKey] as string) : undefined
+        );
+        const currentDiskBytes = this.sizeLiteralToBytes(currentDiskSize);
+        const targetDiskBytes = this.sizeLiteralToBytes(`${diskSize}G`);
+        const shouldResize =
+          targetDiskBytes != null && currentDiskBytes != null
+            ? targetDiskBytes > currentDiskBytes
+            : true;
+
+        if (shouldResize) {
+          try {
+            await this.qemuResizeDisk(vmNode, newId, diskKey, `${diskSize}G`);
+          } catch (resizeErr) {
+            lastFailureDetail = this.extractProxmoxErrorMessage(resizeErr);
+            Logger.warn(
+              `Proxmox createVM attempt ${attempt}/${maxAttempts}: resize failed vmid=${newId} disk=${diskKey} targetGb=${diskSize}: ${lastFailureDetail}`
+            );
+            await rollbackGuest("resize failed");
+            if (
+              attempt < maxAttempts &&
+              this.shouldRetryProvisioningAfterError(resizeErr, lastFailureDetail)
+            ) {
+              await new Promise((r) => setTimeout(r, 800 + Math.floor(Math.random() * 600)));
+              continue;
+            }
+            Logger.error(`Proxmox createVM: disk resize failed vmid=${newId} disk=${diskKey} targetGb=${diskSize}`, resizeErr);
+            this.recordProvisionFailure(lastFailureDetail);
+            return false;
+          }
+        } else {
+          Logger.warn(
+            `Proxmox createVM: skip resize shrink vmid=${newId} disk=${diskKey} current=${currentDiskSize ?? "unknown"} target=${diskSize}G`
+          );
+        }
+
+        await this.apiPost(`/nodes/${vmNode}/qemu/${newId}/status/start`);
+
+        return {
+          id: newId,
+          task: Date.now(),
+          recipe_task_list: [],
+          recipe_task: 0,
+          spice_task: 0,
+        };
+      } catch (error) {
+        lastFailureDetail = this.extractProxmoxErrorMessage(error);
+        Logger.warn(
+          `Proxmox createVM attempt ${attempt}/${maxAttempts} failed: ${lastFailureDetail}`,
+          error
+        );
+        await rollbackGuest("exception");
+        if (attempt < maxAttempts && this.shouldRetryProvisioningAfterError(error, lastFailureDetail)) {
+          await new Promise((r) => setTimeout(r, 600 + Math.floor(Math.random() * 700)));
+          continue;
+        }
+        Logger.error("Proxmox createVM failed", error);
+        this.recordProvisionFailure(lastFailureDetail);
+        return false;
+      }
+    }
+
+    Logger.error(`Proxmox createVM exhausted ${maxAttempts} attempts (last: ${lastFailureDetail})`);
+    this.recordProvisionFailure(lastFailureDetail || `exhausted ${maxAttempts} attempts`);
+    return false;
   }
 
   /**
@@ -754,16 +1145,19 @@ export class ProxmoxProvider implements VmProvider {
   }
 
   async startVM(id: number): Promise<unknown> {
-    return this.apiPost(`/nodes/${this.node}/qemu/${id}/status/start`);
+    const host = (await this.findQemuNodeHostingVmid(id)) ?? this.node;
+    return this.apiPost(`/nodes/${host}/qemu/${id}/status/start`);
   }
 
   async stopVM(id: number): Promise<unknown> {
-    return this.apiPost(`/nodes/${this.node}/qemu/${id}/status/stop`);
+    const host = (await this.findQemuNodeHostingVmid(id)) ?? this.node;
+    return this.apiPost(`/nodes/${host}/qemu/${id}/status/stop`);
   }
 
   async deleteVM(id: number): Promise<unknown> {
+    const host = (await this.findQemuNodeHostingVmid(id)) ?? this.node;
     try {
-      return await this.apiDelete(`/nodes/${this.node}/qemu/${id}?purge=1`);
+      return await this.apiDelete(`/nodes/${host}/qemu/${id}?purge=1`);
     } catch (firstError) {
       Logger.warn(`Proxmox direct delete failed for VM ${id}, trying stop+delete`, firstError);
     }
@@ -773,7 +1167,8 @@ export class ProxmoxProvider implements VmProvider {
     });
     await this.waitForVmStopped(id).catch(() => {});
 
-    return this.apiDelete(`/nodes/${this.node}/qemu/${id}?purge=1&skiplock=1`);
+    const hostAfter = (await this.findQemuNodeHostingVmid(id)) ?? host;
+    return this.apiDelete(`/nodes/${hostAfter}/qemu/${id}?purge=1&skiplock=1`);
   }
 
   async reinstallOS(id: number, osId: number, password?: string, managementDescription?: string): Promise<unknown> {
@@ -782,9 +1177,25 @@ export class ProxmoxProvider implements VmProvider {
       Logger.warn(`Proxmox reinstallOS: invalid template for osId=${osId}, templateVmId=${templateId}, guestVmId=${id}`);
       return false;
     }
+    const templateKey =
+      this.reverseTemplateMap[templateId] ??
+      Object.entries(this.templateMap).find(([, v]) => v === templateId)?.[0];
+    if (!templateKey || !isVpsLinuxOsKey(templateKey)) {
+      Logger.warn(`Proxmox reinstallOS: template is not a Sephora Linux image osId=${osId} vmid=${templateId}`);
+      return false;
+    }
 
+    const templateNode = await this.findQemuNodeHostingVmid(templateId);
+    if (!templateNode) {
+      const detail = await this.explainMissingQemuTemplate(templateId);
+      this.recordProvisionFailure(detail);
+      Logger.error(`Proxmox reinstallOS: template vmid=${templateId} — ${detail}`);
+      return false;
+    }
+
+    const guestNode = (await this.findQemuNodeHostingVmid(id)) ?? this.node;
     const existingConfig =
-      (await this.apiGet<Record<string, unknown>>(`/nodes/${this.node}/qemu/${id}/config`).catch(() => undefined)) ??
+      (await this.apiGet<Record<string, unknown>>(`/nodes/${guestNode}/qemu/${id}/config`).catch(() => undefined)) ??
       undefined;
     if (!existingConfig) return false;
 
@@ -809,10 +1220,10 @@ export class ProxmoxProvider implements VmProvider {
 
       let deleted = false;
       const deletePaths = [
-        `/nodes/${this.node}/qemu/${id}?purge=1&destroy-unreferenced-disks=1&skiplock=1`,
-        `/nodes/${this.node}/qemu/${id}?purge=1&skiplock=1`,
-        `/nodes/${this.node}/qemu/${id}?purge=1`,
-        `/nodes/${this.node}/qemu/${id}`,
+        `/nodes/${guestNode}/qemu/${id}?purge=1&destroy-unreferenced-disks=1&skiplock=1`,
+        `/nodes/${guestNode}/qemu/${id}?purge=1&skiplock=1`,
+        `/nodes/${guestNode}/qemu/${id}?purge=1`,
+        `/nodes/${guestNode}/qemu/${id}`,
       ];
       for (const path of deletePaths) {
         try {
@@ -837,21 +1248,38 @@ export class ProxmoxProvider implements VmProvider {
         throw new Error(`Proxmox reinstall: VM ${id} still exists after purge`);
       }
 
-      await this.apiPost(`/nodes/${this.node}/qemu/${templateId}/clone`, {
+      const clonePayload: Record<string, unknown> = {
         newid: id,
         name: (typeof existingConfig.name === "string" && existingConfig.name.trim()) || `vm-${id}`,
-        target: this.node,
         full: 1,
-        storage: this.storage || undefined,
-      });
+      };
+      const storageTrim = this.storage?.trim();
+      if (storageTrim) clonePayload.storage = storageTrim;
+      if (templateNode !== this.node) {
+        clonePayload.target = this.node;
+      }
+
+      const cloneResult = await this.apiPost<string>(
+        `/nodes/${templateNode}/qemu/${templateId}/clone`,
+        clonePayload
+      );
+
+      if (typeof cloneResult === "string" && cloneResult.startsWith("UPID:")) {
+        const taskOutcome = await this.waitForTaskFinished(templateNode, cloneResult, 600_000);
+        if (!taskOutcome.ok) {
+          throw new Error(`Proxmox reinstall: clone task failed: ${taskOutcome.detail}`);
+        }
+      }
 
       const cloned = await this.waitUntilGuestConfigReadable(id, 180000);
       if (!cloned) {
         throw new Error(`Proxmox reinstall: clone to vmid ${id} never became readable (timeout)`);
       }
 
+      const vmNode = (await this.findQemuNodeHostingVmid(id)) ?? this.node;
+
       const postCloneCfg =
-        (await this.apiGet<Record<string, unknown>>(`/nodes/${this.node}/qemu/${id}/config`).catch(() => undefined)) ??
+        (await this.apiGet<Record<string, unknown>>(`/nodes/${vmNode}/qemu/${id}/config`).catch(() => undefined)) ??
         {};
       const diskKeyAfter = this.findPrimaryQemuDiskKey(postCloneCfg);
 
@@ -860,7 +1288,8 @@ export class ProxmoxProvider implements VmProvider {
           ? existingConfig.net0
           : `virtio,bridge=${this.bridge}`;
 
-      await this.apiPost(`/nodes/${this.node}/qemu/${id}/config`, {
+      await this.apiPost(`/nodes/${vmNode}/qemu/${id}/config`, {
+        sockets: 1,
         cores: Number(existingConfig.cores ?? 1),
         memory: Number(existingConfig.memory ?? 1024),
         ciuser: "root",
@@ -873,10 +1302,7 @@ export class ProxmoxProvider implements VmProvider {
 
       if (preservedDiskSize && diskKeyAfter) {
         try {
-          await this.apiPost(`/nodes/${this.node}/qemu/${id}/resize`, {
-            disk: diskKeyAfter,
-            size: preservedDiskSize,
-          });
+          await this.qemuResizeDisk(vmNode, id, diskKeyAfter, preservedDiskSize);
         } catch (resizeErr) {
           Logger.error(
             `Proxmox reinstall: disk resize failed guest=${id} disk=${diskKeyAfter} size=${preservedDiskSize}`,
@@ -890,7 +1316,7 @@ export class ProxmoxProvider implements VmProvider {
         );
       }
 
-      await this.apiPost(`/nodes/${this.node}/qemu/${id}/status/start`);
+      await this.apiPost(`/nodes/${vmNode}/qemu/${id}/status/start`);
 
       return {
         id,

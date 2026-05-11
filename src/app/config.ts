@@ -194,7 +194,7 @@ export const isProxmoxEnabled = (): boolean => {
   return baseUrl.length > 0 && node.length > 0 && tokenId.length > 0 && tokenSecret.length > 0;
 };
 
-/** Parse PROXMOX_TEMPLATE_MAP JSON (osKey -> template VMID). */
+/** Parse PROXMOX_TEMPLATE_MAP JSON (osKey -> template VMID). Keys should be Linux slugs from VPS_LINUX_OS_KEYS only; each VMID must be a QEMU template used exclusively for Sephora VPS (do not reuse Windows/other-service templates). */
 export const getProxmoxTemplateMap = (): Record<string, number> => {
   const raw = (config.PROXMOX_TEMPLATE_MAP ?? process.env.PROXMOX_TEMPLATE_MAP ?? "").trim();
   if (!raw) return {};
@@ -212,8 +212,19 @@ export const getProxmoxTemplateMap = (): Record<string, number> => {
 };
 
 export const isProxmoxInsecureTls = (): boolean => {
-  const value = (config.PROXMOX_INSECURE_TLS ?? process.env.PROXMOX_INSECURE_TLS ?? "").trim().toLowerCase();
-  return value === "1" || value === "true" || value === "yes" || value === "on";
+  const raw = (config.PROXMOX_INSECURE_TLS ?? process.env.PROXMOX_INSECURE_TLS ?? "").trim().toLowerCase();
+  if (raw === "0" || raw === "false" || raw === "no" || raw === "off") return false;
+  if (raw === "1" || raw === "true" || raw === "yes" || raw === "on") return true;
+  // Unset: Proxmox часто на https://IP:8006 с самоподписанным сертификатом — иначе Node даёт "unable to verify the first certificate".
+  const baseUrl = (config.PROXMOX_BASE_URL ?? process.env.PROXMOX_BASE_URL ?? "").trim();
+  if (!baseUrl) return false;
+  try {
+    const host = new URL(baseUrl).hostname;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true;
+  } catch {
+    return false;
+  }
+  return false;
 };
 
 export const getPrimeChannelForCheck = (): number | string | null => {

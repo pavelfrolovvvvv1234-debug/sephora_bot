@@ -44,6 +44,11 @@ export function createMainMenu(): Menu<AppContext> {
       await openVpsTariffSelection(ctx);
     })
     .row()
+    .text((ctx) => ctx.t("button-manage-services"), async (ctx) => {
+      await ctx.answerCallbackQuery().catch(() => {});
+      const { openVdsManageServicesListScreen } = await import("../../helpers/manage-services.js");
+      await openVdsManageServicesListScreen(ctx);
+    })
     .submenu(
       (ctx) => ctx.t("button-personal-profile"),
       "profile-menu",
@@ -60,11 +65,6 @@ export function createMainMenu(): Menu<AppContext> {
         }
       }
     )
-    .text((ctx) => ctx.t("button-manage-services"), async (ctx) => {
-      await ctx.answerCallbackQuery().catch(() => {});
-      const { openVdsManageServicesListScreen } = await import("../../helpers/manage-services.js");
-      await openVdsManageServicesListScreen(ctx);
-    })
     .row()
     .submenu(
       (ctx) => ctx.t("button-support"),
