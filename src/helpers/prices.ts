@@ -1,15 +1,25 @@
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import type pricesSchema from "../prices.json";
 
-/** Load prices from disk each time so edits to prices.json apply without restart. */
+/** Load prices from disk each time so edits apply after restart (and match last `npm run build`). */
 export default async (): Promise<typeof pricesSchema> => {
-  // Try multiple paths: src/prices.json (dev), dist/../prices.json (built), or current working directory
-  const paths = [
-    join(process.cwd(), "src", "prices.json"),
-    join(process.cwd(), "prices.json"),
-    join(__dirname || process.cwd(), "..", "prices.json"),
-  ];
+  const fromDistBundle = typeof __filename === "string" && __filename.includes(`${sep}dist${sep}`);
+  const distPrices = join(process.cwd(), "dist", "prices.json");
+  const srcPrices = join(process.cwd(), "src", "prices.json");
+  const paths = fromDistBundle
+    ? [
+        distPrices,
+        srcPrices,
+        join(process.cwd(), "prices.json"),
+        join(__dirname || process.cwd(), "..", "prices.json"),
+      ]
+    : [
+        srcPrices,
+        distPrices,
+        join(process.cwd(), "prices.json"),
+        join(__dirname || process.cwd(), "..", "prices.json"),
+      ];
 
   for (const path of paths) {
     if (existsSync(path)) {
