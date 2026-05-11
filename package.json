@@ -10,7 +10,7 @@
     "build": "tsc && (node scripts/fix-dist-aliases.cjs || node scripts/fix-dist-fallback.cjs) && (npx --yes tsc-alias -p tsconfig.json || true) && (node scripts/fix-dist-aliases.cjs || node scripts/fix-dist-fallback.cjs) && npm run fix-prices",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "fix-dist": "node scripts/fix-dist-aliases.cjs || node scripts/fix-dist-fallback.cjs",
-    "start": "tsx dist/index.js",
+    "start": "node --no-deprecation dist/index.js",
     "start:node": "node --no-deprecation dist/index.js",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
