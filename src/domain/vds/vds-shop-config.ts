@@ -2,7 +2,7 @@
  * VPS shop: tier per plan index (prices.json virtual_vds order). 4 plans total.
  *
  * Sephora VPS template (must match prices.json virtual_vds rows in order):
- * 1/1/10, 2/2/15, 2/3/25, 2/4/30 — Proxmox createVM uses cpu/ram/ssd/network from these rows.
+ * 1/1/10 ($1), 1/2/15 ($2), 2/2/20 ($3), 2/3/30 ($4) — Proxmox createVM uses cpu/ram/ssd/network from these rows.
  */
 
 export type VpsShopTier = "start" | "standard" | "performance" | "enterprise";
@@ -26,9 +26,9 @@ export const VPS_CATALOG_TEMPLATE: ReadonlyArray<{
   network: number;
 }> = [
   { name: "1/1/10", cpu: 1, ram: 1, ssd: 10, network: 150 },
-  { name: "2/2/15", cpu: 2, ram: 2, ssd: 15, network: 150 },
-  { name: "2/3/25", cpu: 2, ram: 3, ssd: 25, network: 150 },
-  { name: "2/4/30", cpu: 2, ram: 4, ssd: 30, network: 150 },
+  { name: "1/2/15", cpu: 1, ram: 2, ssd: 15, network: 150 },
+  { name: "2/2/20", cpu: 2, ram: 2, ssd: 20, network: 150 },
+  { name: "2/3/30", cpu: 2, ram: 3, ssd: 30, network: 150 },
 ];
 
 export function assertVdsCatalogLength(catalogLen: number): void {

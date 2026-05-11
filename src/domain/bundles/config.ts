@@ -29,7 +29,7 @@ export async function getBundleConfig(
       nameKey: "bundle-starter-shield",
       descriptionKey: "bundle-starter-shield-desc",
       domainTld: ".com",
-      vpsRateId: 0, // 1/1/10
+      vpsRateId: 0, // 1/1/10 ($1)
       vpsBulletproof: true,
       features: [
         BundleFeature.DOMAIN,
@@ -45,7 +45,7 @@ export async function getBundleConfig(
       nameKey: "bundle-launch-pack",
       descriptionKey: "bundle-launch-pack-desc",
       domainTld: ".com",
-      vpsRateId: 1, // 2/2/15
+      vpsRateId: 1, // 1/2/15 ($2)
       vpsBulletproof: true,
       features: [
         BundleFeature.DOMAIN,
@@ -64,7 +64,7 @@ export async function getBundleConfig(
       nameKey: "bundle-infrastructure",
       descriptionKey: "bundle-infrastructure-desc",
       domainTld: ".com",
-      vpsRateId: 3, // 2/4/30
+      vpsRateId: 3, // 2/3/30 ($4)
       vpsBulletproof: true,
       features: [
         BundleFeature.DOMAIN,
@@ -83,7 +83,7 @@ export async function getBundleConfig(
       nameKey: "bundle-secure-launch",
       descriptionKey: "bundle-secure-launch-desc",
       domainTld: ".com",
-      vpsRateId: 2, // 2/3/25
+      vpsRateId: 2, // 2/2/20 ($3)
       vpsBulletproof: true,
       features: [
         BundleFeature.DOMAIN,
@@ -102,7 +102,7 @@ export async function getBundleConfig(
       nameKey: "bundle-full-stack",
       descriptionKey: "bundle-full-stack-desc",
       domainTld: ".com",
-      vpsRateId: 3, // 2/4/30
+      vpsRateId: 3, // 2/3/30 ($4)
       vpsBulletproof: true,
       features: [
         BundleFeature.DOMAIN,
@@ -121,7 +121,7 @@ export async function getBundleConfig(
       nameKey: "bundle-pro-infrastructure",
       descriptionKey: "bundle-pro-infrastructure-desc",
       domainTld: ".com",
-      vpsRateId: 3, // 2/4/30
+      vpsRateId: 3, // 2/3/30 ($4)
       vpsBulletproof: true,
       features: [
         BundleFeature.DOMAIN,
