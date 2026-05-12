@@ -22,6 +22,7 @@ import UserNotificationState from "../../../entities/automations/UserNotificatio
 import AutomationEventLog from "../../../entities/automations/AutomationEventLog.js";
 import AutomationScenario from "../../../entities/automations/AutomationScenario.js";
 import { Logger } from "../../../app/logger.js";
+import { isTelegramOptedOutOfSephoraBroadcasts } from "../../../shared/broadcast-opt-out.js";
 
 export type SendMessageFn = (telegramId: number, text: string, buttons?: Array<{ text: string; url?: string; callback_data?: string }>) => Promise<void>;
 
@@ -55,6 +56,10 @@ export async function runScenarioForEvent(params: RunScenarioParams): Promise<"s
   const userRepo = dataSource.getRepository(User);
   const user = await userRepo.findOne({ where: { id: userId }, select: ["id", "telegramId", "lang"] });
   if (!user?.telegramId) return "skipped";
+  if (isTelegramOptedOutOfSephoraBroadcasts(user.telegramId)) {
+    await logOutcome(dataSource, scenarioKey, userId, "skipped", null, "broadcast_opt_out");
+    return "skipped";
+  }
 
   const ctx: EvalContext = {
     userId: user.id,
@@ -152,6 +157,10 @@ export async function runScenarioForScheduleUser(params: RunScheduleScenarioPara
   const userRepo = dataSource.getRepository(User);
   const user = await userRepo.findOne({ where: { id: userId }, select: ["id", "telegramId", "lang"] });
   if (!user?.telegramId) return "skipped";
+  if (isTelegramOptedOutOfSephoraBroadcasts(user.telegramId)) {
+    await logOutcome(dataSource, scenarioKey, userId, "skipped", null, "broadcast_opt_out");
+    return "skipped";
+  }
 
   const ctx: EvalContext = {
     userId: user.id,

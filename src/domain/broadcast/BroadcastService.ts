@@ -10,6 +10,10 @@ import BroadcastLog, { BroadcastLogStatus } from "../../entities/BroadcastLog.js
 import User from "../../entities/User.js";
 import { Logger } from "../../app/logger.js";
 import type { Bot } from "grammy";
+import {
+  isTelegramOptedOutOfSephoraBroadcasts,
+  warmBroadcastOptOutTelegramIds,
+} from "../../shared/broadcast-opt-out.js";
 
 /**
  * Broadcast service for managing message broadcasts.
@@ -82,8 +86,10 @@ export class BroadcastService {
     broadcast.status = BroadcastStatus.SENDING;
     await broadcastRepo.save(broadcast);
 
+    await warmBroadcastOptOutTelegramIds(this.bot);
+
     // Get all users
-    const users = await userRepo.find();
+    const users = (await userRepo.find()).filter((u) => !isTelegramOptedOutOfSephoraBroadcasts(u.telegramId));
 
     Logger.info(`Starting broadcast ${broadcastId} to ${users.length} users`);
 
@@ -203,6 +209,7 @@ export class BroadcastService {
    * @returns Count of users sent to
    */
   async sendToSegment(segment: string, message: string): Promise<{ sent: number; failed: number }> {
+    await warmBroadcastOptOutTelegramIds(this.bot);
     const { SegmentService } = await import("../../modules/growth/segment.service.js");
     const segmentService = new SegmentService(this.dataSource);
     const userIds = await segmentService.getUserIdsBySegment(segment as any, 10_000);
@@ -213,12 +220,13 @@ export class BroadcastService {
       .select(["u.id", "u.telegramId"])
       .where("u.id IN (:...ids)", { ids: userIds })
       .getMany();
+    const filtered = users.filter((u) => !isTelegramOptedOutOfSephoraBroadcasts(u.telegramId));
     let sent = 0;
     let failed = 0;
     const BATCH_SIZE = 10;
     const DELAY_MS = 1000;
-    for (let i = 0; i < users.length; i += BATCH_SIZE) {
-      const batch = users.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < filtered.length; i += BATCH_SIZE) {
+      const batch = filtered.slice(i, i + BATCH_SIZE);
       await Promise.all(
         batch.map(async (user) => {
           try {
@@ -229,7 +237,7 @@ export class BroadcastService {
           }
         })
       );
-      if (i + BATCH_SIZE < users.length) {
+      if (i + BATCH_SIZE < filtered.length) {
         await new Promise((resolve) => setTimeout(resolve, DELAY_MS));
       }
     }

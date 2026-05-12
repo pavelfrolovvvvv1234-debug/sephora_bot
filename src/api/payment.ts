@@ -515,7 +515,7 @@ async function runPostTopUpCreditSideEffects(
       getReferralPushMessage,
       markReferralPushSent,
     } = await import("../modules/growth/campaigns/referral-push.campaign.js");
-    if (await canSendCommercialPush(targetUser)) {
+    if (await canSendCommercialPush(targetUser, user.telegramId)) {
       const newLtv = await getCumulativeDeposit(datasource, targetUser);
       const tierInfo = await getTierUpgradeInfo(datasource, targetUser, newLtv);
       if (tierInfo) {

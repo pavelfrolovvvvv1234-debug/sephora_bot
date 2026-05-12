@@ -61,7 +61,7 @@ export async function runWinBackCampaign(
         .andWhere("d.updatedAt >= :cutoff", { cutoff })
         .getOne();
       if (hasRecentDomain) continue;
-      if (!(await canSendCommercialPush(u.id))) continue;
+      if (!(await canSendCommercialPush(u.id, u.telegramId))) continue;
       await sendMessage(u.telegramId, formatMessage(u.balance));
       await markCommercialPushSent(u.id);
       sent++;

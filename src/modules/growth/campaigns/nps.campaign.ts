@@ -44,9 +44,9 @@ export async function runNpsCampaign(
     try {
       const key = `${NPS_SENT_KEY}${row.userId}`;
       if (await getOffer(key)) continue;
-      if (!(await canSendCommercialPush(row.userId))) continue;
       const user = await userRepo.findOne({ where: { id: row.userId }, select: ["telegramId"] });
       if (!user?.telegramId) continue;
+      if (!(await canSendCommercialPush(row.userId, user.telegramId))) continue;
       await sendMessage(user.telegramId, MESSAGE_REQUEST);
       await setOffer(key, "1", NPS_COOLDOWN_SEC);
       await markCommercialPushSent(row.userId);

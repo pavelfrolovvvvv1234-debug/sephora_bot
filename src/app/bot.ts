@@ -43,6 +43,7 @@ import { invalidateUser } from "../shared/user-cache.js";
 import { TopUpRepository } from "../infrastructure/db/repositories/TopUpRepository.js";
 import { ExpirationService } from "../domain/services/ExpirationService.js";
 import { handleCryptoPayWebhook } from "../infrastructure/payments/cryptopay-webhook.js";
+import { warmBroadcastOptOutTelegramIds, isTelegramOptedOutOfSephoraBroadcasts } from "../shared/broadcast-opt-out.js";
 import {
   adminPromosMenu,
   registerAdminPromosHandlers,
@@ -80,6 +81,10 @@ export async function createBot(): Promise<{
 
   // Create bot instance first
   const bot = new Bot<AppContext>(config.BOT_TOKEN, {});
+
+  await warmBroadcastOptOutTelegramIds(bot).catch((err) =>
+    Logger.warn("[Broadcast opt-out] Could not resolve all opt-out usernames (use BROADCAST_OPT_OUT_TELEGRAM_IDS for numeric ids)", err)
+  );
 
   // Inline mode: pop-up card above input (title + description), like Market & Tochka. Placeholder "Search..." = BotFather.
   bot.use(async (ctx, next) => {
@@ -737,8 +742,10 @@ export async function createBot(): Promise<{
         }
       : undefined;
 
-  const sendGrowthMessage = (telegramId: number, text: string): Promise<void> =>
-    bot.api.sendMessage(telegramId, text, { parse_mode: "HTML" }).then(() => {});
+  const sendGrowthMessage = (telegramId: number, text: string): Promise<void> => {
+    if (isTelegramOptedOutOfSephoraBroadcasts(telegramId)) return Promise.resolve();
+    return bot.api.sendMessage(telegramId, text, { parse_mode: "HTML" }).then(() => {});
+  };
 
   let onGraceDayCheck: import("../domain/services/ExpirationService.js").OnGraceDayCheck | undefined;
   try {
@@ -771,6 +778,7 @@ export async function createBot(): Promise<{
     Logger.info("Automation event handler started");
 
     const sendMessage: (tid: number, text: string, buttons?: Array<{ text: string; url?: string; callback_data?: string }>) => Promise<void> = async (tid, text, buttons) => {
+      if (isTelegramOptedOutOfSephoraBroadcasts(tid)) return;
       const extra: { parse_mode?: string; reply_markup?: unknown } = { parse_mode: "HTML" };
       if (buttons?.length) {
         const { InlineKeyboard } = await import("grammy");

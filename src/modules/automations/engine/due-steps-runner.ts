@@ -19,6 +19,7 @@ import AutomationEventLog from "../../../entities/automations/AutomationEventLog
 import AutomationScenario from "../../../entities/automations/AutomationScenario.js";
 import type { SendMessageFn } from "./runner.js";
 import { Logger } from "../../../app/logger.js";
+import { isTelegramOptedOutOfSephoraBroadcasts } from "../../../shared/broadcast-opt-out.js";
 
 export async function runDueMultiSteps(
   dataSource: DataSource,
@@ -57,6 +58,7 @@ export async function runDueMultiSteps(
         select: ["id", "telegramId", "lang"],
       });
       if (!user?.telegramId) continue;
+      if (isTelegramOptedOutOfSephoraBroadcasts(user.telegramId)) continue;
 
       const throttle = await checkThrottle(dataSource, scenarioKey, state.userId, config);
       if (!throttle.allowed) continue;

@@ -10,6 +10,7 @@ import type { Bot } from "grammy";
 import { onEvent, getAllPublishedKeys, getPublishedConfig, runScenarioForEvent } from "../engine/index.js";
 import type { AutomationEventPayload } from "../events/types.js";
 import { Logger } from "../../../app/logger.js";
+import { isTelegramOptedOutOfSephoraBroadcasts } from "../../../shared/broadcast-opt-out.js";
 
 export function setupAutomationEventHandler(
   dataSource: DataSource,
@@ -20,6 +21,7 @@ export function setupAutomationEventHandler(
     text,
     buttons
   ) => {
+    if (isTelegramOptedOutOfSephoraBroadcasts(telegramId)) return;
     const extra: { parse_mode?: string; reply_markup?: unknown } = { parse_mode: "HTML" };
     if (buttons && buttons.length > 0) {
       const { InlineKeyboard } = await import("grammy");

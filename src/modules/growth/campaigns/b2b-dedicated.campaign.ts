@@ -57,9 +57,9 @@ export async function runB2BDedicatedCampaign(
         const ts = parseInt(last, 10);
         if (!Number.isNaN(ts) && Date.now() - ts * 1000 < B2B_COOLDOWN_SEC * 1000) continue;
       }
-      if (!(await canSendCommercialPush(userId))) continue;
       const user = await userRepo.findOne({ where: { id: userId }, select: ["telegramId"] });
       if (!user?.telegramId) continue;
+      if (!(await canSendCommercialPush(userId, user.telegramId))) continue;
       await sendMessage(user.telegramId, MESSAGE);
       await setOffer(key, String(Math.floor(Date.now() / 1000)), B2B_COOLDOWN_SEC);
       await markCommercialPushSent(userId);

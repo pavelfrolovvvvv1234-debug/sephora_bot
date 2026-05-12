@@ -49,7 +49,7 @@ export async function runScarcityCampaign(
         const ts = parseInt(last, 10);
         if (!Number.isNaN(ts) && Date.now() - ts * 1000 < SCARCITY_COOLDOWN_SEC * 1000) continue;
       }
-      if (!(await canSendCommercialPush(u.id))) continue;
+      if (!(await canSendCommercialPush(u.id, u.telegramId))) continue;
       await sendMessage(u.telegramId, MESSAGE);
       await setOffer(key, String(Math.floor(Date.now() / 1000)), SCARCITY_COOLDOWN_SEC);
       await markCommercialPushSent(u.id);

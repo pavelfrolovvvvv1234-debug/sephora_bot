@@ -52,10 +52,10 @@ export async function runUsageUpsellCampaign(
       }
       const metrics = await getUsageOverThreshold(vds.vdsId);
       if (!metrics.over) continue;
-      const canSend = await canSendCommercialPush(vds.targetUserId);
-      if (!canSend) continue;
       const user = await userRepo.findOne({ where: { id: vds.targetUserId }, select: ["telegramId"] });
       if (!user?.telegramId) continue;
+      const canSend = await canSendCommercialPush(vds.targetUserId, user.telegramId);
+      if (!canSend) continue;
       await sendMessage(user.telegramId, MESSAGE);
       await setOffer(lastKey, String(Math.floor(Date.now() / 1000)), USAGE_COOLDOWN_SEC);
       await markCommercialPushSent(vds.targetUserId);

@@ -22,10 +22,10 @@ export async function sendIncidentUpsell(
   sendMessage: (telegramId: number, text: string) => Promise<void>
 ): Promise<boolean> {
   try {
-    if (!(await canSendCommercialPush(userId))) return false;
     const userRepo = dataSource.getRepository(User);
     const user = await userRepo.findOne({ where: { id: userId }, select: ["telegramId"] });
     if (!user?.telegramId) return false;
+    if (!(await canSendCommercialPush(userId, user.telegramId))) return false;
     await sendMessage(user.telegramId, MESSAGE);
     await markCommercialPushSent(userId);
     return true;

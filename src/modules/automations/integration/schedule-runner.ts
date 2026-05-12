@@ -13,6 +13,7 @@ import AutomationScenario from "../../../entities/automations/AutomationScenario
 import User from "../../../entities/User.js";
 import VirtualDedicatedServer from "../../../entities/VirtualDedicatedServer.js";
 import { Logger } from "../../../app/logger.js";
+import { isTelegramOptedOutOfSephoraBroadcasts } from "../../../shared/broadcast-opt-out.js";
 
 const lastCronRun = new Map<string, number>();
 const lastCalendarRun = new Map<string, string>();
@@ -124,6 +125,7 @@ async function getUsersForSegment(
 
 export function startScheduleRunner(dataSource: DataSource, bot: Bot): () => void {
   const sendMessage: (tid: number, text: string, buttons?: Array<{ text: string; url?: string; callback_data?: string }>) => Promise<void> = async (tid, text, buttons) => {
+    if (isTelegramOptedOutOfSephoraBroadcasts(tid)) return;
     const extra: { parse_mode?: string; reply_markup?: unknown } = { parse_mode: "HTML" };
     if (buttons?.length) {
       const { InlineKeyboard } = await import("grammy");

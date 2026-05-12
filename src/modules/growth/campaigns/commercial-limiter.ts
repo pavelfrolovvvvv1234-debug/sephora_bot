@@ -5,10 +5,12 @@
  */
 
 import { OfferEngine } from "../offer.engine.js";
+import { isTelegramOptedOutOfSephoraBroadcasts } from "../../../shared/broadcast-opt-out.js";
 
 const offerEngine = new OfferEngine();
 
-export async function canSendCommercialPush(userId: number): Promise<boolean> {
+export async function canSendCommercialPush(userId: number, telegramId?: number): Promise<boolean> {
+  if (telegramId != null && isTelegramOptedOutOfSephoraBroadcasts(telegramId)) return false;
   return offerEngine.canSendCommercialPush(userId);
 }
 

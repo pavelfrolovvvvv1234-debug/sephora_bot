@@ -4,6 +4,8 @@
  * @module modules/growth/growth.module
  */
 
+import { isTelegramOptedOutOfSephoraBroadcasts } from "../../shared/broadcast-opt-out.js";
+
 export { GrowthService } from "./growth.service.js";
 export type { GrowthHandleTopUpResult } from "./growth.service.js";
 export { UpsellService } from "./upsell.service.js";
@@ -32,7 +34,9 @@ export async function startReactivationCron(
       for (const u of users) {
         await reactivation.createOffer(u.id);
         if (sendMessage) {
-          await sendMessage(u.telegramId, "Вернитесь и получите +15% к депозиту!").catch(() => {});
+          if (!isTelegramOptedOutOfSephoraBroadcasts(u.telegramId)) {
+            await sendMessage(u.telegramId, "Вернитесь и получите +15% к депозиту!").catch(() => {});
+          }
         }
       }
     } catch (e) {

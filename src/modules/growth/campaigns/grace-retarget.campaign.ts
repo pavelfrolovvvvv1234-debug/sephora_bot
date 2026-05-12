@@ -42,7 +42,7 @@ export async function maybeSendGraceDay2OrDay3(
     if (hoursLeft <= 24) {
       const key3 = `${GRACE_DAY3_KEY}${vdsId}`;
       if (!(await getOffer(key3))) {
-        if (await canSendCommercialPush(userId)) {
+        if (await canSendCommercialPush(userId, telegramId)) {
           await sendMessage(telegramId, MESSAGE_DAY3);
           await setOffer(key3, "1", GRACE_DAY3_TTL);
           await markCommercialPushSent(userId);
@@ -52,7 +52,7 @@ export async function maybeSendGraceDay2OrDay3(
     } else {
       const key2 = `${GRACE_DAY2_KEY}${vdsId}`;
       if (!(await getOffer(key2))) {
-        if (await canSendCommercialPush(userId)) {
+        if (await canSendCommercialPush(userId, telegramId)) {
           await sendMessage(telegramId, MESSAGE_DAY2);
           await setOffer(key2, "1", GRACE_DAY2_TTL);
           await markCommercialPushSent(userId);
