@@ -1118,12 +1118,11 @@ async function index() {
   bot.use(promocodeQuestion.middleware());
   bot.use(vdsManageSpecific);
 
-  bot.callbackQuery(/^vds-renew-yes:(\d+):(\d+)$/, async (ctx) => {
+  bot.callbackQuery(/^vds-renew-yes:(\d+):1$/, async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
     const session = (await ctx.session) as SessionData;
     const vdsId = Number(ctx.match![1]);
-    const months = Number(ctx.match![2]) as 1 | 3 | 6 | 12;
-    if (![1, 3, 6, 12].includes(months)) return;
+    const months = 1 as const;
     session.other.manageVds.pendingRenewMonths = null;
     const { VdsService } = await import("./domain/services/VdsService.js");
     const { VdsRepository } = await import("./infrastructure/db/repositories/VdsRepository.js");

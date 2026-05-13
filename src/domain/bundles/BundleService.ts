@@ -14,6 +14,7 @@ import { Logger } from "../../app/logger.js";
 import prices from "../../helpers/prices.js";
 import ms from "../../lib/multims.js";
 import type { VmProvider } from "../../infrastructure/vmmanager/provider.js";
+import { getVdsPurchaseDenyReason } from "../vds/vds-stock-limits.js";
 
 /**
  * Bundle purchase result.
@@ -84,6 +85,16 @@ export class BundleService {
         success: false,
         error: `Insufficient balance. Required: ${pricing.finalPrice}, Available: ${user.balance}`,
       };
+    }
+
+    if (config.vpsRateId != null && this.vmmanager) {
+      const denyBundle = await getVdsPurchaseDenyReason(this.dataSource, userId);
+      if (denyBundle === "global_full") {
+        return { success: false, error: "global_full" };
+      }
+      if (denyBundle === "user_limit") {
+        return { success: false, error: "user_limit" };
+      }
     }
 
     const pricesList = await prices();

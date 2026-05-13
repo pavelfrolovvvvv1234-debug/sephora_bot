@@ -35,6 +35,7 @@ import {
   escapeHtml,
   getVpsCpuModelForRate,
 } from "../domain/vds/vps-onboarding-messages.js";
+import { getVdsPurchaseDenyReason } from "../domain/vds/vds-stock-limits.js";
 
 const renderMultiline = (text: string): string => text.replace(/\\n/g, "\n");
 
@@ -250,6 +251,16 @@ async function createAndBuyVDS(
   if (!user) {
     await ctx.reply(ctx.t("bad-error"));
     return "user-not-found" as const;
+  }
+
+  const denyLegacy = await getVdsPurchaseDenyReason(appDataSource, userId);
+  if (denyLegacy === "global_full") {
+    await ctx.reply(ctx.t("vds-capacity-full"), { parse_mode: "HTML" });
+    return "vds-stock" as const;
+  }
+  if (denyLegacy === "user_limit") {
+    await ctx.reply(ctx.t("vds-per-user-limit"), { parse_mode: "HTML" });
+    return "vds-stock" as const;
   }
 
   const basePrice = bulletproof ? rate.price.bulletproof : rate.price.default;

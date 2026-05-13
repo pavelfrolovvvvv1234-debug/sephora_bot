@@ -17,6 +17,7 @@ import {
   warnIfVdsCatalogDrift,
   type VpsShopTier,
 } from "./vds-shop-config.js";
+import { getVdsPurchaseDenyReason } from "./vds-stock-limits.js";
 import { showTopupForMissingAmount } from "../../helpers/deposit-money.js";
 import { DedicatedProvisioningService } from "../dedicated/DedicatedProvisioningService.js";
 import { DedicatedOrderPaymentStatus } from "../../entities/DedicatedServerOrder.js";
@@ -90,6 +91,16 @@ async function createVpsOrderTicket(
   const user = await usersRepo.findOneBy({ id: session.main.user.id });
   if (!user) {
     await ctx.reply(ctx.t("bad-error"), { parse_mode: "HTML" }).catch(() => {});
+    return;
+  }
+
+  const denyTicket = await getVdsPurchaseDenyReason(dataSource, user.id);
+  if (denyTicket === "global_full") {
+    await ctx.reply(ctx.t("vds-capacity-full"), { parse_mode: "HTML" }).catch(() => {});
+    return;
+  }
+  if (denyTicket === "user_limit") {
+    await ctx.reply(ctx.t("vds-per-user-limit"), { parse_mode: "HTML" }).catch(() => {});
     return;
   }
 
@@ -244,6 +255,16 @@ async function createVpsOrderDirect(
   const user = await usersRepo.findOneBy({ id: session.main.user.id });
   if (!user) {
     await ctx.reply(ctx.t("bad-error"), { parse_mode: "HTML" }).catch(() => {});
+    return false;
+  }
+
+  const denyDirect = await getVdsPurchaseDenyReason(dataSource, user.id);
+  if (denyDirect === "global_full") {
+    await ctx.reply(ctx.t("vds-capacity-full"), { parse_mode: "HTML" }).catch(() => {});
+    return false;
+  }
+  if (denyDirect === "user_limit") {
+    await ctx.reply(ctx.t("vds-per-user-limit"), { parse_mode: "HTML" }).catch(() => {});
     return false;
   }
 
@@ -583,6 +604,16 @@ export async function openVpsTariffSelection(ctx: AppContext): Promise<void> {
 export async function showVpsShopStep2Tier(ctx: AppContext): Promise<void> {
   const session = await ctx.session;
   ensureVpsShopSession(session);
+  const dataSource = ctx.appDataSource ?? (await getAppDataSource());
+  const denyBrowse = await getVdsPurchaseDenyReason(dataSource, session.main.user.id);
+  if (denyBrowse === "global_full") {
+    await ctx.reply(ctx.t("vds-capacity-full"), { parse_mode: "HTML" }).catch(() => {});
+    return;
+  }
+  if (denyBrowse === "user_limit") {
+    await ctx.reply(ctx.t("vds-per-user-limit"), { parse_mode: "HTML" }).catch(() => {});
+    return;
+  }
   session.other.vdsRate.shopTier = null;
   session.other.vdsRate.shopListPage = 0;
   await showVpsShopStep3List(ctx, 0);

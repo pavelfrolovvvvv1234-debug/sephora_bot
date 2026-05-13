@@ -13,6 +13,7 @@ import { getAdminTelegramIds } from "../app/config.js";
 import { retry } from "../shared/utils/retry.js";
 import { AppError, ExternalApiError } from "../shared/errors/index.js";
 import { buildVdsProxmoxDescriptionLine } from "../shared/vds-proxmox-label.js";
+import { getVdsPurchaseDenyReason } from "../domain/vds/vds-stock-limits.js";
 
 type ResellerAuthInfo = {
   resellerId: string;
@@ -115,7 +116,7 @@ const actionSetPasswordSchema = z.object({
 });
 
 const actionRenewSchema = z.object({
-  months: z.number().int().positive().optional(),
+  months: z.number().int().min(1).max(1).optional(),
 });
 
 const actionReinstallSchema = z.object({
@@ -436,8 +437,8 @@ function getPlansMap(): Map<string, PricePlan> {
 }
 
 function parseMonthsToDays(months: number): number {
-  if (![1, 3, 6, 12].includes(months)) return 30;
-  return months * 30;
+  const m = months === 1 ? 1 : 1;
+  return m * 30;
 }
 
 function parsePositiveInt(value: unknown): number | null {
@@ -803,6 +804,18 @@ export function startResellerApiServer(options: ResellerApiOptions): void {
       const clientUser = await getOrCreateClientUser(options.dataSource, resellerId, clientExternalId);
       const vdsRepo = options.dataSource.getRepository(VirtualDedicatedServer);
       const existing = await vdsRepo.findOneBy({ vdsId: vmid });
+      if (!existing) {
+        const denyImport = await getVdsPurchaseDenyReason(options.dataSource, clientUser.id);
+        if (denyImport === "global_full") {
+          res.status(503).json({ ok: false, error: "vds_capacity_full", ...requestMeta(req) });
+          return;
+        }
+        if (denyImport === "user_limit") {
+          res.status(403).json({ ok: false, error: "vds_user_limit", ...requestMeta(req) });
+          return;
+        }
+      }
+
       const password = generatePassword(12);
       await options.vmProvider.changePasswordVMCustom(vmid, password).catch(() => {});
 
@@ -891,6 +904,17 @@ export function startResellerApiServer(options: ResellerApiOptions): void {
       const osId = body.osId ?? 900;
       const password = generatePassword(12);
       const name = String(body.name ?? generateRandomName(13));
+      const clientUser = await getOrCreateClientUser(options.dataSource, resellerId, clientExternalId);
+      const denyCreate = await getVdsPurchaseDenyReason(options.dataSource, clientUser.id);
+      if (denyCreate === "global_full") {
+        res.status(503).json({ ok: false, error: "vds_capacity_full", ...requestMeta(req) });
+        return;
+      }
+      if (denyCreate === "user_limit") {
+        res.status(403).json({ ok: false, error: "vds_user_limit", ...requestMeta(req) });
+        return;
+      }
+
       const vm = await options.vmProvider.createVM(
         name,
         password,
@@ -922,7 +946,6 @@ export function startResellerApiServer(options: ResellerApiOptions): void {
       }
 
       const ip = await pollResellerVmIpv4(options.vmProvider, vmid);
-      const clientUser = await getOrCreateClientUser(options.dataSource, resellerId, clientExternalId);
       const entity = vdsRepo.create({
         vdsId: vmid,
         login: "root",

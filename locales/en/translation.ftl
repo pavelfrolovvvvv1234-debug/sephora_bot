@@ -749,6 +749,9 @@ vps-premium-console-hint = Power controls, reinstall, billing, and password chan
 
 bad-error = Sorry, there's been a mistake on our end, we're fixing it now.
 
+vds-capacity-full = All capacity is in use at the moment.
+vds-per-user-limit = You already have the maximum number of VPS (2). You cannot order another until a slot is free.
+
 vds-created = Your server is ready. Manage it under Main menu → My services.
 
 vds-manage-title = Manage VDS
@@ -768,9 +771,6 @@ vds-renew-success = ✅ Subscription renewed for {$months} mo.
 
 vds-autorenew-enable = 🔄 Enable auto-renewal
 vds-autorenew-disable = ⏸ Disable auto-renewal
-
-vds-buy-extra-ip = ➕ Add IPv4
-vds-extra-ip-buy-success = Charged {NUMBER($price, style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 2)} $. Extra IP recorded in billing (panel attach — contact support if needed).
 
 vds-password-generate = 🔁 Generate password
 vds-password-manual = ✏️ Set password manually

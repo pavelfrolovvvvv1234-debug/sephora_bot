@@ -416,7 +416,7 @@ export class VdsService {
   async renewVdsWithMonths(
     vdsId: number,
     userIdForOwnershipCheck: number,
-    months: 1 | 3 | 6 | 12
+    months: 1
   ): Promise<boolean> {
     const vds = await this.getVdsById(vdsId);
 
@@ -485,58 +485,6 @@ export class VdsService {
     vds.autoRenewEnabled = enabled;
     await this.vdsRepository.save(vds);
     return vds;
-  }
-
-  /** Price per extra IPv4 (USD) from env, default 2. */
-  getExtraIpv4UnitPrice(): number {
-    const raw = process.env.VDS_EXTRA_IPV4_PRICE_USD;
-    const n = raw != null && raw !== "" ? parseFloat(raw) : 2;
-    return Number.isFinite(n) && n > 0 ? n : 2;
-  }
-
-  /**
-   * Purchase one extra IPv4 (billing + DB). VM attach may require manual/API follow-up.
-   */
-  async purchaseExtraIpv4(vdsId: number, userId: number): Promise<VirtualDedicatedServer> {
-    const vds = await this.getVdsById(vdsId);
-    if (vds.targetUserId !== userId) {
-      throw new BusinessError("You don't own this VDS");
-    }
-    if (vds.managementLocked) {
-      throw new BusinessError("Management is locked for this VDS; renew first.");
-    }
-    if (vds.adminBlocked) {
-      throw new BusinessError("This VDS is blocked by administrator.");
-    }
-    if (vds.extraIpv4Count >= 9) {
-      throw new BusinessError("Maximum extra IPv4 count reached (10 IPs total).");
-    }
-
-    const price = this.getExtraIpv4UnitPrice();
-    if (!(await this.billingService.hasSufficientBalance(userId, price))) {
-      throw new BusinessError("Insufficient balance for extra IPv4.");
-    }
-
-    await this.dataSource.transaction(async (manager) => {
-      const vdsRepo = manager.getRepository(VirtualDedicatedServer);
-      const userRepo = manager.getRepository(User);
-      const user = await userRepo.findOne({ where: { id: userId } });
-      if (!user) throw new NotFoundError("User", userId);
-      user.balance -= price;
-      vds.extraIpv4Count += 1;
-      await userRepo.save(user);
-      await vdsRepo.save(vds);
-    });
-
-    const apiOk = await this.vmManager.addIpv4ToHost(vds.vdsId);
-    if (!apiOk) {
-      Logger.warn(
-        `VDS ${vdsId}: extra IPv4 billed in DB; VMmanager addIpv4 API failed — check panel or API version`
-      );
-    }
-
-    Logger.info(`VDS ${vdsId}: extra IPv4 purchased, count=${vds.extraIpv4Count}`);
-    return await this.getVdsById(vdsId);
   }
 
   /** Admin: transfer VDS to another user (DB only). */

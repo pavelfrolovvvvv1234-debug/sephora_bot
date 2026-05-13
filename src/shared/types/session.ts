@@ -66,7 +66,7 @@ export interface OtherSessionData {
     pendingRenameVdsId?: number | null;
     pendingManualPasswordVdsId?: number | null;
     /** Pending renewal period until user confirms (callback). */
-    pendingRenewMonths?: 1 | 3 | 6 | 12 | null;
+    pendingRenewMonths?: 1 | null;
   };
   /** Admin: VDS list / search / actions */
   adminVds: {

@@ -223,6 +223,10 @@ export async function handleBundleConfirmPurchase(ctx: AppContext): Promise<void
           }) ||
           `Домен <b>${result.domain?.domain}</b> успешно зарегистрирован.\n\nVPS временно недоступен (не подключены данные от VMManager). Когда подключите — пакеты с VPS заработают.`);
       await ctx.reply(msg, { parse_mode: "HTML" });
+    } else if (result.error === "global_full") {
+      await ctx.reply(ctx.t("vds-capacity-full"), { parse_mode: "HTML" });
+    } else if (result.error === "user_limit") {
+      await ctx.reply(ctx.t("vds-per-user-limit"), { parse_mode: "HTML" });
     } else {
       await ctx.reply(ctx.t("error-unknown", { error: result.error || "Purchase failed" }), {
         parse_mode: "HTML",

@@ -1083,28 +1083,25 @@ export const vdsManageServiceMenu = new Menu<AppContext>(
         range.row();
 
         if (panelMode === "renew") {
-          const periods = [1, 3, 6, 12] as const;
-          for (const m of periods) {
-            range.text(`📅 ${m} мес.`, async (ctx) => {
-              await ctx.answerCallbackQuery().catch(() => {});
-              const vdsRepo = ctx.appDataSource.getRepository(VirtualDedicatedServer);
-              const vds = await vdsRepo.findOneBy({ id: expandedId });
-              if (!vds || Number(vds.targetUserId) !== Number(session.main.user.id)) {
-                await ctx.reply(ctx.t("bad-error"));
-                return;
-              }
-              const total = Math.round(vds.renewalPrice * m * 100) / 100;
-              const sess = await ctx.session;
-              sess.other.manageVds.pendingRenewMonths = m;
-              await ctx.reply(ctx.t("vds-renew-confirm-ask", { months: m, total }), {
-                parse_mode: "HTML",
-                reply_markup: new InlineKeyboard()
-                  .text(ctx.t("button-confirm"), `vds-renew-yes:${expandedId}:${m}`)
-                  .text(ctx.t("button-cancel"), `vds-renew-no:${expandedId}`),
-              });
+          range.text(`📅 1 мес.`, async (ctx) => {
+            await ctx.answerCallbackQuery().catch(() => {});
+            const vdsRepo = ctx.appDataSource.getRepository(VirtualDedicatedServer);
+            const vds = await vdsRepo.findOneBy({ id: expandedId });
+            if (!vds || Number(vds.targetUserId) !== Number(session.main.user.id)) {
+              await ctx.reply(ctx.t("bad-error"));
+              return;
+            }
+            const m = 1;
+            const total = Math.round(vds.renewalPrice * m * 100) / 100;
+            const sess = await ctx.session;
+            sess.other.manageVds.pendingRenewMonths = m;
+            await ctx.reply(ctx.t("vds-renew-confirm-ask", { months: m, total }), {
+              parse_mode: "HTML",
+              reply_markup: new InlineKeyboard()
+                .text(ctx.t("button-confirm"), `vds-renew-yes:${expandedId}:1`)
+                .text(ctx.t("button-cancel"), `vds-renew-no:${expandedId}`),
             });
-            if (m === 3) range.row();
-          }
+          });
           range.row();
           return;
         }
@@ -1125,27 +1122,6 @@ export const vdsManageServiceMenu = new Menu<AppContext>(
             const cur = vds.autoRenewEnabled !== false;
             await vdsService.setAutoRenewEnabled(expandedId, session.main.user.id, !cur);
             await updateVdsManageView(ctx);
-          });
-          range.row();
-
-          range.text(ctx.t("vds-buy-extra-ip"), async (ctx) => {
-            await ctx.answerCallbackQuery().catch(() => {});
-            const vdsRepo = ctx.appDataSource.getRepository(VirtualDedicatedServer);
-            const vds = await vdsRepo.findOneBy({ id: expandedId });
-            if (!vds) return;
-            const vdsRepository = new VdsRepository(ctx.appDataSource);
-            const userRepository = new UserRepository(ctx.appDataSource);
-            const topUpRepository = new TopUpRepository(ctx.appDataSource);
-            const billingService = new BillingService(ctx.appDataSource, userRepository, topUpRepository);
-            const vdsService = new VdsService(ctx.appDataSource, vdsRepository, billingService, ctx.vmmanager);
-            try {
-              await vdsService.purchaseExtraIpv4(expandedId, session.main.user.id);
-              const price = vdsService.getExtraIpv4UnitPrice();
-              await ctx.reply(ctx.t("vds-extra-ip-buy-success", { price }));
-              await updateVdsManageView(ctx);
-            } catch (e: any) {
-              await ctx.reply(ctx.t("error-unknown", { error: e?.message || "err" }));
-            }
           });
           range.row();
 
